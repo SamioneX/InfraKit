@@ -1,0 +1,44 @@
+project: my-api
+region: us-east-1
+env: dev
+
+state:
+  backend: local
+  path: .infrakit/state.json
+
+services:
+
+  users_table:
+    type: dynamodb
+    billing: pay-per-request
+    hash_key: userId
+    hash_key_type: S
+
+  api_role:
+    type: iam-role
+    assumed_by: lambda.amazonaws.com
+    policies:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  api_handler:
+    type: lambda
+    runtime: python3.12
+    handler: app.handler
+    code: ./src
+    memory_mb: 512
+    timeout_s: 30
+    environment:
+      TABLE_NAME: !ref users_table.name
+    role: !ref api_role.arn
+
+  api_gateway:
+    type: api-gateway
+    integration: !ref api_handler.arn
+    routes:
+      - GET /users/{id}
+      - POST /users
+      - DELETE /users/{id}
+
+  uploads_bucket:
+    type: s3
+    versioning: true

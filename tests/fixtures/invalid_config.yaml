@@ -1,0 +1,11 @@
+# Missing required fields to trigger Pydantic validation errors
+project: ""
+region: not-a-region
+env: unknown-env
+
+services:
+  bad_table:
+    type: dynamodb
+    # missing hash_key
+    billing: provisioned
+    # provisioned but no read/write capacity
