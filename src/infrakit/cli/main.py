@@ -10,6 +10,7 @@ import typer
 
 from infrakit.cli import deploy as _deploy_mod
 from infrakit.cli import destroy as _destroy_mod
+from infrakit.cli import init as _init_mod
 from infrakit.cli import status as _status_mod
 
 app = typer.Typer(
@@ -22,6 +23,7 @@ app = typer.Typer(
 app.command("deploy")(_deploy_mod.deploy)
 app.command("destroy")(_destroy_mod.destroy)
 app.command("status")(_status_mod.status)
+app.command("init")(_init_mod.init)
 
 
 @app.command("validate")

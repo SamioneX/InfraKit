@@ -111,17 +111,24 @@ class Engine:
         print_plan_table(creates, updates, deletes)
 
     def deploy(self, auto_approve: bool = False) -> None:
-        """Provision all resources in dependency order."""
+        """Provision all resources in dependency order.
+
+        Idempotency: resources that already exist in state *and* in AWS are
+        skipped — their stored outputs are reused.  Resources in state but
+        missing from AWS are recreated (drift recovery).
+        """
         run_id = str(uuid.uuid4())[:8]
         self._backend.lock(run_id)
         created_this_run: list[str] = []
+        changes_made = 0
 
         try:
             state = self._backend.load()
             state.setdefault("resources", {})
+            existing_state = state["resources"]
             accumulated_outputs: dict[str, dict[str, Any]] = {
                 name: entry["outputs"]
-                for name, entry in state["resources"].items()
+                for name, entry in existing_state.items()
             }
 
             order = creation_order(self.cfg.services)
@@ -135,13 +142,23 @@ class Engine:
 
                 rtype = resource.type  # type: ignore[union-attr]
 
-                if provider.exists():
-                    console.print(f"  [yellow]~[/yellow] {name} ({rtype}) — updating")
-                    outputs = provider.update(accumulated_outputs.get(name, {}))
+                if name in existing_state and provider.exists():
+                    # Resource is tracked in state and confirmed live — no changes needed.
+                    console.print(f"  [dim]=[/dim] {name} ({rtype}) — no changes")
+                    outputs = accumulated_outputs[name]
+                elif name in existing_state and not provider.exists():
+                    # State says it exists but AWS disagrees — drift: recreate.
+                    console.print(
+                        f"  [yellow]![/yellow] {name} ({rtype}) — drift detected, recreating"
+                    )
+                    outputs = provider.create()
+                    created_this_run.append(name)
+                    changes_made += 1
                 else:
                     console.print(f"  [green]+[/green] {name} ({rtype}) — creating")
                     outputs = provider.create()
                     created_this_run.append(name)
+                    changes_made += 1
 
                 accumulated_outputs[name] = outputs
                 self._backend.set_resource(name, rtype, outputs)
@@ -153,7 +170,12 @@ class Engine:
         finally:
             self._backend.unlock(run_id)
 
-        console.print("\n  [bold green]Deploy complete.[/bold green]\n")
+        if changes_made == 0:
+            console.print(
+                "\n  [bold green]All resources up to date.[/bold green]\n"
+            )
+        else:
+            console.print("\n  [bold green]Deploy complete.[/bold green]\n")
 
     def destroy(self, auto_approve: bool = False) -> None:
         """Tear down all resources tracked in state."""
