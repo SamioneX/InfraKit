@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.error import HTTPError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -99,12 +99,14 @@ class DNSProvider(ResourceProvider):
 
         cfg = self.config
         if cfg.alias:
-            alias = record.get("AliasTarget")
-            if not alias:
+            alias_raw = record.get("AliasTarget")
+            if not isinstance(alias_raw, dict):
                 return False
-            return (
-                alias["DNSName"].rstrip(".") == self._record_target
-                and alias["HostedZoneId"] == cfg.target_hosted_zone_id
+            alias = cast(dict[str, Any], alias_raw)
+            dns_name = str(alias.get("DNSName", "")).rstrip(".")
+            hosted_zone_id = str(alias.get("HostedZoneId", ""))
+            return bool(
+                dns_name == self._record_target and hosted_zone_id == cfg.target_hosted_zone_id
             )
 
         values = [r["Value"].strip('"').rstrip(".") for r in record.get("ResourceRecords", [])]
@@ -311,7 +313,9 @@ class DNSProvider(ResourceProvider):
         except HTTPError as exc:
             raise RuntimeError(f"Cloudflare API request failed ({exc.code}): {exc.reason}") from exc
 
+        if not isinstance(data, dict):
+            raise RuntimeError("Cloudflare API request failed: malformed JSON response.")
         if not bool(data.get("success", True)):
             errors = data.get("errors", [])
             raise RuntimeError(f"Cloudflare API request failed: {errors!r}")
-        return data
+        return cast(dict[str, Any], data)
