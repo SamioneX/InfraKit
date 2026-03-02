@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from urllib.error import HTTPError
 from urllib.request import Request
 
 import pytest
@@ -145,3 +146,166 @@ class TestCloudflareDNSProvider:
 
         provider.delete()
         assert provider.exists() is False
+
+
+class TestDNSProviderHelpers:
+    def test_record_fqdn_and_target_helpers(self, mocked_aws: None, route53_zone: str) -> None:
+        cfg = DNSResource(
+            type="dns",
+            provider="route53",
+            zone="example.com",
+            record="@",
+            target="https://service.example.net/health",
+            record_type="CNAME",
+        )
+        provider = DNSProvider("helper_dns", cfg, project="proj", env="dev")
+        assert provider._record_fqdn == "example.com"
+        assert provider._record_target == "service.example.net"
+
+        cfg_txt = DNSResource(
+            type="dns",
+            provider="route53",
+            zone="example.com",
+            record="txt.example.com",
+            target="plain txt value",
+            record_type="TXT",
+        )
+        provider_txt = DNSProvider("helper_txt_dns", cfg_txt, project="proj", env="dev")
+        assert provider_txt._record_fqdn == "txt.example.com"
+        assert provider_txt._record_target == "plain txt value"
+
+    def test_route53_zone_not_found_raises(self, mocked_aws: None) -> None:
+        cfg = DNSResource(
+            type="dns",
+            provider="route53",
+            zone="missing-zone.com",
+            record="api",
+            target="service.example.net",
+            record_type="CNAME",
+        )
+        provider = DNSProvider("missing_zone_dns", cfg, project="proj", env="dev")
+        with pytest.raises(ValueError, match="hosted zone"):
+            provider.exists()
+
+    def test_route53_alias_without_alias_target_does_not_match(
+        self, mocked_aws: None, route53_zone: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg = DNSResource(
+            type="dns",
+            provider="route53",
+            zone="example.com",
+            record="@",
+            target="my-alb.us-east-1.elb.amazonaws.com",
+            record_type="A",
+            alias=True,
+            target_hosted_zone_id="Z35SXDOTRQ7X7K",
+        )
+        provider = DNSProvider("alias_dns", cfg, project="proj", env="dev")
+        monkeypatch.setattr(
+            provider,
+            "_get_route53_record_set",
+            lambda: {"Name": "example.com.", "Type": "A", "AliasTarget": "invalid"},
+        )
+        assert provider.exists() is False
+
+    def test_cloudflare_token_missing_secret_raises(self, mocked_aws: None) -> None:
+        cfg = DNSResource(
+            type="dns",
+            provider="cloudflare",
+            zone="example.com",
+            record="api",
+            target="service.example.net",
+            record_type="CNAME",
+        )
+        provider = DNSProvider("cf_missing_secret", cfg, project="proj", env="dev")
+        with pytest.raises(ValueError, match="not found or not accessible"):
+            provider._cloudflare_token()
+
+    def test_cloudflare_token_empty_secret_string_raises(self, mocked_aws: None) -> None:
+        secrets = AWSSession.client("secretsmanager", region_name="us-east-1")
+        secrets.create_secret(Name="/proj/cloudflare-token", SecretString="")
+
+        cfg = DNSResource(
+            type="dns",
+            provider="cloudflare",
+            zone="example.com",
+            record="api",
+            target="service.example.net",
+            record_type="CNAME",
+        )
+        provider = DNSProvider("cf_empty_secret", cfg, project="proj", env="dev")
+        with pytest.raises(ValueError, match="no SecretString"):
+            provider._cloudflare_token()
+
+    def test_cloudflare_request_http_error(self, mocked_aws: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        _seed_cloudflare_token_secret()
+        cfg = DNSResource(
+            type="dns",
+            provider="cloudflare",
+            zone="example.com",
+            record="api",
+            target="service.example.net",
+            record_type="CNAME",
+        )
+        provider = DNSProvider("cf_http_error", cfg, project="proj", env="dev")
+
+        def fail_urlopen(req: Request, timeout: int = 15) -> _HTTPResponse:
+            raise HTTPError(req.full_url, 403, "Forbidden", hdrs=None, fp=None)
+
+        monkeypatch.setattr("infrakit.providers.dns.urlopen", fail_urlopen)
+        with pytest.raises(RuntimeError, match="Cloudflare API request failed \\(403\\)"):
+            provider._cloudflare_request("GET", "/zones?name=example.com", None)
+
+    def test_cloudflare_request_malformed_response(
+        self, mocked_aws: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _seed_cloudflare_token_secret()
+        cfg = DNSResource(
+            type="dns",
+            provider="cloudflare",
+            zone="example.com",
+            record="api",
+            target="service.example.net",
+            record_type="CNAME",
+        )
+        provider = DNSProvider("cf_malformed", cfg, project="proj", env="dev")
+
+        def malformed_urlopen(req: Request, timeout: int = 15) -> _HTTPResponse:
+            return _HTTPResponse({"success": True, "result": []}) if "noop" in req.full_url else _HTTPResponse({})  # pragma: no cover
+
+        class _ListResponse:
+            def __enter__(self) -> _ListResponse:
+                return self
+
+            def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b"[]"
+
+        monkeypatch.setattr("infrakit.providers.dns.urlopen", lambda req, timeout=15: _ListResponse())
+        with pytest.raises(RuntimeError, match="malformed JSON response"):
+            provider._cloudflare_request("GET", "/zones?name=example.com", None)
+
+    def test_cloudflare_request_unsuccessful_payload(
+        self, mocked_aws: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _seed_cloudflare_token_secret()
+        cfg = DNSResource(
+            type="dns",
+            provider="cloudflare",
+            zone="example.com",
+            record="api",
+            target="service.example.net",
+            record_type="CNAME",
+        )
+        provider = DNSProvider("cf_unsuccessful", cfg, project="proj", env="dev")
+
+        monkeypatch.setattr(
+            "infrakit.providers.dns.urlopen",
+            lambda req, timeout=15: _HTTPResponse(
+                {"success": False, "errors": [{"message": "bad token"}]}
+            ),
+        )
+        with pytest.raises(RuntimeError, match="bad token"):
+            provider._cloudflare_request("GET", "/zones?name=example.com", None)
