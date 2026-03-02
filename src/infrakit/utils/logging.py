@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import traceback
 from datetime import UTC, datetime
 from typing import Any
 
@@ -67,7 +68,7 @@ class _JsonHandler(logging.StreamHandler):  # type: ignore[type-arg]
             "msg": record.getMessage(),
         }
         if record.exc_info:
-            payload["exc"] = self.formatException(record.exc_info)
+            payload["exc"] = "".join(traceback.format_exception(*record.exc_info))
         try:
             self.stream.write(json.dumps(payload) + "\n")
             self.stream.flush()

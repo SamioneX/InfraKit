@@ -40,7 +40,7 @@ def extract_refs(resource_dict: dict[str, Any]) -> set[str]:
     return refs
 
 
-def build_dag(services: dict[str, Any]) -> nx.DiGraph:
+def build_dag(services: dict[str, Any]) -> nx.DiGraph[str]:
     """Build a directed graph where an edge A→B means A depends on B.
 
     Args:
@@ -51,7 +51,7 @@ def build_dag(services: dict[str, Any]) -> nx.DiGraph:
     Returns:
         A ``networkx.DiGraph`` with one node per service name.
     """
-    graph: nx.DiGraph = nx.DiGraph()
+    graph: nx.DiGraph[str] = nx.DiGraph()
     graph.add_nodes_from(services.keys())
 
     for name, resource in services.items():

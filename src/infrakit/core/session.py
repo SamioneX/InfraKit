@@ -15,7 +15,6 @@ import threading
 from typing import Any
 
 import boto3
-from botocore.client import BaseClient
 
 from infrakit.utils.logging import get_logger
 
@@ -75,14 +74,14 @@ class AWSSession:
     # ------------------------------------------------------------------
 
     @classmethod
-    def client(cls, service: str, **kwargs: Any) -> BaseClient:
+    def client(cls, service: str, **kwargs: Any) -> Any:
         """Return a boto3 client for *service* using the shared session."""
-        return cls._get_session().client(service, **kwargs)  # type: ignore[return-value]
+        return cls._get_session().client(service, **kwargs)  # type: ignore[call-overload]
 
     @classmethod
     def resource(cls, service: str, **kwargs: Any) -> Any:
         """Return a boto3 resource for *service* using the shared session."""
-        return cls._get_session().resource(service, **kwargs)
+        return cls._get_session().resource(service, **kwargs)  # type: ignore[call-overload]
 
     @classmethod
     def reset(cls) -> None:

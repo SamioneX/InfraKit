@@ -10,13 +10,14 @@ The engine is the brain of InfraKit.  It:
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.console import Console
 
 from infrakit.core.dependency import creation_order, destruction_order
 from infrakit.core.session import AWSSession
 from infrakit.providers.api_gateway import APIGatewayProvider
+from infrakit.providers.base import ResourceProvider
 from infrakit.providers.dynamodb import DynamoDBProvider
 from infrakit.providers.iam import IAMProvider
 from infrakit.providers.lambda_ import LambdaProvider
@@ -29,11 +30,8 @@ from infrakit.schema.models import (
     LambdaResource,
     S3Resource,
 )
+from infrakit.state.backend import StateBackend
 from infrakit.state.local import LocalStateBackend
-
-if TYPE_CHECKING:
-    from infrakit.providers.base import ResourceProvider
-    from infrakit.state.backend import StateBackend
 from infrakit.utils.logging import get_logger
 from infrakit.utils.output import print_plan_table
 
@@ -65,7 +63,7 @@ def _make_provider(
 def _make_state_backend(cfg: InfraKitConfig) -> StateBackend:
     state_cfg = cfg.state
     if state_cfg.backend == "local":
-        return LocalStateBackend(state_cfg.path)  # type: ignore[union-attr]
+        return LocalStateBackend(state_cfg.path)
     raise NotImplementedError(
         "S3 state backend is Phase 3. Use backend: local for now."
     )
@@ -94,7 +92,7 @@ class Engine:
         order = creation_order(self.cfg.services)
         for name in order:
             resource = self.cfg.services[name]
-            rtype = resource.type  # type: ignore[union-attr]
+            rtype = resource.type
             if name in existing:
                 updates.append((name, rtype))
             else:
@@ -142,7 +140,7 @@ class Engine:
                 )
                 provider.resolve_refs(accumulated_outputs)
 
-                rtype = resource.type  # type: ignore[union-attr]
+                rtype = resource.type
 
                 if name in existing_state and provider.exists():
                     # Resource is tracked in state and confirmed live — no changes needed.
@@ -213,7 +211,7 @@ class Engine:
                 provider = _make_provider(
                     name, resource, self.cfg.project, self.cfg.env, self.cfg.region
                 )
-                console.print(f"  [red]-[/red] {name} ({resource.type}) — destroying")  # type: ignore[union-attr]
+                console.print(f"  [red]-[/red] {name} ({resource.type}) — destroying")
                 provider.delete()
                 self._backend.remove_resource(name)
 

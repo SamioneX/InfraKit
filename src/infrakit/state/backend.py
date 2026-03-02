@@ -28,6 +28,20 @@ class StateBackend(ABC):
     def unlock(self, run_id: str) -> None:
         """Release the deployment lock."""
 
+    @abstractmethod
+    def set_resource(
+        self,
+        name: str,
+        resource_type: str,
+        outputs: dict[str, Any],
+        status: str = "created",
+    ) -> None:
+        """Upsert a single resource entry and persist state."""
+
+    @abstractmethod
+    def remove_resource(self, name: str) -> None:
+        """Remove a resource entry from state and persist."""
+
 
 class StateLockError(Exception):
     """Raised when the state is already locked by another deployment."""

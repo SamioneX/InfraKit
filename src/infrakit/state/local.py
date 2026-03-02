@@ -93,7 +93,8 @@ class LocalStateBackend(StateBackend):
     def get_resource(self, name: str) -> dict[str, Any] | None:
         """Return the stored resource entry for *name*, or None."""
         state = self.load()
-        return state.get("resources", {}).get(name)
+        resources: dict[str, dict[str, Any]] = state.get("resources", {})
+        return resources.get(name)
 
     def set_resource(
         self,
