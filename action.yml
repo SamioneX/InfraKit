@@ -1,0 +1,63 @@
+name: "InfraKit"
+description: "Run infrakit plan, deploy, or destroy from your GitHub workflow"
+author: "Samuel Okechukwu"
+
+branding:
+  icon: "cloud"
+  color: "blue"
+
+inputs:
+  command:
+    description: "infrakit command to run: plan | deploy | destroy"
+    required: true
+    default: "plan"
+  config:
+    description: "Path to infrakit.yaml (relative to repo root)"
+    required: false
+    default: "infrakit.yaml"
+  aws-region:
+    description: "AWS region to deploy into"
+    required: false
+    default: "us-east-1"
+  auto-approve:
+    description: "Pass --auto-approve to deploy/destroy (skip confirmation prompt)"
+    required: false
+    default: "false"
+  python-version:
+    description: "Python version to use"
+    required: false
+    default: "3.12"
+  infrakit-version:
+    description: "sokech-infrakit version to install (e.g. '0.3.0' or 'latest')"
+    required: false
+    default: "latest"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install InfraKit
+      shell: bash
+      run: |
+        if [ "${{ inputs.infrakit-version }}" = "latest" ]; then
+          pip install sokech-infrakit
+        else
+          pip install "sokech-infrakit==${{ inputs.infrakit-version }}"
+        fi
+
+    - name: Run infrakit ${{ inputs.command }}
+      shell: bash
+      run: |
+        ARGS="--config ${{ inputs.config }}"
+        if [ "${{ inputs.command }}" = "deploy" ] || [ "${{ inputs.command }}" = "destroy" ]; then
+          if [ "${{ inputs.auto-approve }}" = "true" ]; then
+            ARGS="$ARGS --auto-approve"
+          fi
+        fi
+        infrakit ${{ inputs.command }} $ARGS
+      env:
+        AWS_DEFAULT_REGION: ${{ inputs.aws-region }}

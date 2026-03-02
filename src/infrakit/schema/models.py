@@ -119,6 +119,7 @@ class ECSFargateResource(BaseModel):
     memory_mb: int = Field(default=512)
     port: int = Field(default=8080, ge=1, le=65535)
     task_role: str | None = None
+    load_balancer: str | None = None  # !ref alb.target_group_arn
     environment: dict[str, str] = Field(default_factory=dict)
     desired_count: int = Field(default=1, ge=0)
 
@@ -132,7 +133,7 @@ class ElastiCacheResource(BaseModel):
 
 class ALBResource(BaseModel):
     type: Literal["alb"]
-    target: str  # !ref to ecs-fargate
+    target: str | None = None  # optional annotation only — not used in AWS wiring
     port: int = Field(default=80, ge=1, le=65535)
     health_check_path: str = "/health"
     scheme: Literal["internet-facing", "internal"] = "internet-facing"

@@ -83,8 +83,18 @@ $ infrakit deploy --auto-approve
 |-------|------|--------|
 | **Phase 1** | Core — schema validation, 5 resource providers, deploy/destroy/plan CLI | ✅ **Complete** |
 | **Phase 2** | DX — `infrakit init`, PyPI publish, Docker image, idempotency improvements | ✅ **Complete** |
-| **Phase 3** | DevOps — S3+DynamoDB remote state, GitHub Action | ⬜ Next |
-| **Phase 4** | Reliability — atomic rollback, drift detection, cost estimation | ⬜ Planned |
+| **Phase 3** | DevOps — S3+DynamoDB remote state, ECS/ElastiCache/ALB providers, GitHub Action | ✅ **Complete** |
+| **Phase 4** | Reliability — drift detection, cost estimation | ⬜ Next |
+
+### Phase 3 deliverables (complete)
+
+- **S3 + DynamoDB remote state backend** — same pattern as Terraform; safe for concurrent CI runners
+- **ECS Fargate provider** — auto-detects default VPC/subnets; registers with ALB target group via `load_balancer: !ref alb.target_group_arn`
+- **ElastiCache provider** — Redis and Memcached clusters; VPC-aware subnet group and security group management
+- **ALB provider** — Application Load Balancer + target group + listener; outputs `target_group_arn` for ECS wiring
+- **GitHub Action** (`action.yml`) — composite action for `infrakit plan/deploy/destroy` in any workflow
+- **`examples/task-manager/`** — deployable ECS Fargate + ALB + DynamoDB example; used in Phase 4 drift detection demo
+- 166 tests, 90.6% coverage, mypy strict + ruff passing
 
 ### Phase 2 deliverables (complete)
 
@@ -156,9 +166,9 @@ docker run --rm \
 | `lambda` | AWS Lambda Function | ✅ Phase 1 |
 | `api-gateway` | Amazon API Gateway (HTTP API v2) | ✅ Phase 1 |
 | `s3` | Amazon S3 Bucket | ✅ Phase 1 |
-| `ecs-fargate` | ECS Fargate Service + Task Definition | ⬜ Phase 3 |
-| `elasticache` | ElastiCache Cluster (Redis) | ⬜ Phase 3 |
-| `alb` | Application Load Balancer | ⬜ Phase 3 |
+| `ecs-fargate` | ECS Fargate Service + Task Definition | ✅ Phase 3 |
+| `elasticache` | ElastiCache Cluster (Redis / Memcached) | ✅ Phase 3 |
+| `alb` | Application Load Balancer | ✅ Phase 3 |
 
 ---
 
@@ -176,14 +186,14 @@ env:     prod         # dev | staging | prod
 
 ```yaml
 state:
-  backend: local                   # local (default) | s3 (Phase 3)
+  backend: local                   # local (default) | s3
   path: .infrakit/state.json       # local backend path
 
-# Phase 3: remote backend
+# Remote backend (S3 + DynamoDB locking — same pattern as Terraform)
 state:
   backend: s3
-  bucket: my-infrakit-state
-  lock_table: infrakit-locks       # DynamoDB table for distributed locking
+  bucket: my-infrakit-state        # must pre-exist
+  lock_table: infrakit-locks       # DynamoDB table (LockID String primary key); must pre-exist
 ```
 
 ### `!ref` syntax
@@ -206,6 +216,9 @@ Supported attributes per resource type:
 | `iam-role` | `.arn`, `.name` |
 | `s3` | `.name`, `.arn`, `.bucket_url` |
 | `api-gateway` | `.endpoint`, `.id` |
+| `ecs-fargate` | `.name`, `.arn`, `.cluster` |
+| `elasticache` | `.name`, `.endpoint`, `.port`, `.arn` |
+| `alb` | `.id`, `.endpoint`, `.arn`, `.target_group_arn` |
 
 ---
 

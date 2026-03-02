@@ -16,22 +16,31 @@ from rich.console import Console
 
 from infrakit.core.dependency import creation_order, destruction_order
 from infrakit.core.session import AWSSession
+from infrakit.providers.alb import ALBProvider
 from infrakit.providers.api_gateway import APIGatewayProvider
 from infrakit.providers.base import ResourceProvider
 from infrakit.providers.dynamodb import DynamoDBProvider
+from infrakit.providers.ecs import ECSFargateProvider
+from infrakit.providers.elasticache import ElastiCacheProvider
 from infrakit.providers.iam import IAMProvider
 from infrakit.providers.lambda_ import LambdaProvider
 from infrakit.providers.s3 import S3Provider
 from infrakit.schema.models import (
+    ALBResource,
     APIGatewayResource,
     DynamoDBResource,
+    ECSFargateResource,
+    ElastiCacheResource,
     IAMRoleResource,
     InfraKitConfig,
     LambdaResource,
+    LocalStateConfig,
     S3Resource,
+    S3StateConfig,
 )
 from infrakit.state.backend import StateBackend
 from infrakit.state.local import LocalStateBackend
+from infrakit.state.s3 import S3StateBackend
 from infrakit.utils.logging import get_logger
 from infrakit.utils.output import print_plan_table
 
@@ -57,16 +66,29 @@ def _make_provider(
         return APIGatewayProvider(name, resource, project, env, region)
     if isinstance(resource, S3Resource):
         return S3Provider(name, resource, project, env, region)
+    if isinstance(resource, ECSFargateResource):
+        return ECSFargateProvider(name, resource, project, env, region)
+    if isinstance(resource, ElastiCacheResource):
+        return ElastiCacheProvider(name, resource, project, env, region)
+    if isinstance(resource, ALBResource):
+        return ALBProvider(name, resource, project, env, region)
     raise NotImplementedError(f"No provider implemented for resource type: {type(resource)}")
 
 
 def _make_state_backend(cfg: InfraKitConfig) -> StateBackend:
     state_cfg = cfg.state
-    if state_cfg.backend == "local":
+    if isinstance(state_cfg, LocalStateConfig):
         return LocalStateBackend(state_cfg.path)
-    raise NotImplementedError(
-        "S3 state backend is Phase 3. Use backend: local for now."
-    )
+    if isinstance(state_cfg, S3StateConfig):
+        return S3StateBackend(
+            bucket=state_cfg.bucket,
+            lock_table=state_cfg.lock_table,
+            key_prefix=state_cfg.key_prefix,
+            project=cfg.project,
+            env=cfg.env,
+            region=cfg.region,
+        )
+    raise NotImplementedError(f"Unknown state backend: {state_cfg.backend}")
 
 
 class Engine:

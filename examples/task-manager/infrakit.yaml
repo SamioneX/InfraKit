@@ -1,0 +1,42 @@
+project: task-manager
+region:  us-east-1
+env:     dev
+
+# State is local by default. For team use, switch to:
+#   state:
+#     backend: s3
+#     bucket: my-infrakit-state
+#     lock_table: infrakit-locks
+
+services:
+
+  task_table:
+    type: dynamodb
+    billing: pay-per-request
+    hash_key: taskId
+    hash_key_type: S
+    ttl_attribute: expiresAt
+
+  task_role:
+    type: iam-role
+    assumed_by: ecs-tasks.amazonaws.com
+    policies:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  task_alb:
+    type: alb
+    port: 80
+    health_check_path: /health
+    scheme: internet-facing
+
+  task_service:
+    type: ecs-fargate
+    image: nginx:alpine
+    cpu: 256
+    memory_mb: 512
+    port: 80
+    task_role: !ref task_role.arn
+    load_balancer: !ref task_alb.target_group_arn
+    desired_count: 1
+    environment:
+      TABLE_NAME: !ref task_table.name
