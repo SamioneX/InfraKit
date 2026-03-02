@@ -131,3 +131,70 @@ class TestStatusCommand:
         runner.invoke(app, ["deploy", "--config", str(valid_cfg), "--auto-approve"])
         result = runner.invoke(app, ["status", "--config", str(valid_cfg)])
         assert result.exit_code == 0
+
+
+class TestPlanJsonFlag:
+    def test_plan_json_valid_config(self, valid_cfg: Path) -> None:
+        import json
+
+        result = runner.invoke(app, ["plan", "--config", str(valid_cfg), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert "creates" in data
+        assert "deletes" in data
+        assert "has_changes" in data
+
+    def test_plan_json_shows_creates(self, valid_cfg: Path) -> None:
+        import json
+
+        result = runner.invoke(app, ["plan", "--config", str(valid_cfg), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["creates"]) == 1
+        assert data["creates"][0]["name"] == "my_table"
+        assert data["has_changes"] is True
+
+    def test_plan_json_invalid_config_exits_1(self, invalid_cfg: Path) -> None:
+        result = runner.invoke(app, ["plan", "--config", str(invalid_cfg), "--json"])
+        assert result.exit_code == 1
+
+
+class TestDriftCommand:
+    def test_drift_no_state_exits_0(self, mocked_aws: None, valid_cfg: Path) -> None:
+        result = runner.invoke(app, ["drift", "--config", str(valid_cfg)])
+        assert result.exit_code == 0
+
+    def test_drift_all_ok_exits_0(self, mocked_aws: None, valid_cfg: Path) -> None:
+        runner.invoke(app, ["deploy", "--config", str(valid_cfg), "--auto-approve"])
+        result = runner.invoke(app, ["drift", "--config", str(valid_cfg)])
+        assert result.exit_code == 0
+        # The "No drift detected" summary line is written via typer.echo → stdout
+        assert "No drift detected" in result.stdout
+
+    def test_drift_missing_resource_exits_1(self, mocked_aws: None, valid_cfg: Path) -> None:
+        from infrakit.core.session import AWSSession
+
+        runner.invoke(app, ["deploy", "--config", str(valid_cfg), "--auto-approve"])
+        # Delete the table out-of-band
+        AWSSession.client("dynamodb").delete_table(TableName="test-app-dev-my_table")
+        result = runner.invoke(app, ["drift", "--config", str(valid_cfg)])
+        assert result.exit_code == 1
+        # The "Drift detected: N missing" summary line is written via typer.echo → stdout
+        assert "missing" in result.stdout
+
+    def test_drift_json_flag_outputs_valid_json(
+        self, mocked_aws: None, valid_cfg: Path
+    ) -> None:
+        import json
+
+        runner.invoke(app, ["deploy", "--config", str(valid_cfg), "--auto-approve"])
+        result = runner.invoke(app, ["drift", "--config", str(valid_cfg), "--json"])
+        data = json.loads(result.stdout)
+        assert "resources" in data
+        assert "has_drift" in data
+        assert "summary" in data
+        assert data["has_drift"] is False
+
+    def test_drift_invalid_config_exits_1(self, invalid_cfg: Path) -> None:
+        result = runner.invoke(app, ["drift", "--config", str(invalid_cfg)])
+        assert result.exit_code == 1

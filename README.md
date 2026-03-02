@@ -8,7 +8,7 @@ pip install sokech-infrakit && infrakit deploy
 
 [![CI](https://github.com/SamioneX/InfraKit/actions/workflows/ci.yml/badge.svg)](https://github.com/SamioneX/InfraKit/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/sokech-infrakit)](https://pypi.org/project/sokech-infrakit/)
-[![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/SamioneX/InfraKit)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://github.com/SamioneX/InfraKit)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/sokech-infrakit/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -84,7 +84,16 @@ $ infrakit deploy --auto-approve
 | **Phase 1** | Core — schema validation, 5 resource providers, deploy/destroy/plan CLI | ✅ **Complete** |
 | **Phase 2** | DX — `infrakit init`, PyPI publish, Docker image, idempotency improvements | ✅ **Complete** |
 | **Phase 3** | DevOps — S3+DynamoDB remote state, ECS/ElastiCache/ALB providers, GitHub Action | ✅ **Complete** |
-| **Phase 4** | Reliability — drift detection, cost estimation | ⬜ Next |
+| **Phase 4** | Reliability — drift detection, atomic rollback observability, machine-readable plan output | ✅ **Complete** |
+
+### Phase 4 deliverables (complete)
+
+- **`infrakit drift`** — compares state file against live AWS; reports each resource as `OK`, `MISSING`, or `ERROR`; exits 1 when drift is detected so CI pipelines can alert
+- **`infrakit plan --json`** — machine-readable plan output for CI systems; returns `creates`, `deletes`, `has_changes` as structured JSON
+- **`Engine.plan_data()`** — single source of truth for plan logic; shared by human-readable table output and `--json` flag
+- **Rollback observability** — writes `status="failed"` to state before attempting delete so a crash mid-rollback leaves a traceable record; reports any resources that could not be cleaned up
+- 184 tests, 90.2% coverage, mypy strict + ruff passing
+- **Live AWS verified** — deploy task-manager stack → delete DynamoDB table out-of-band → `infrakit drift` reports MISSING, exit 1 → `infrakit deploy` recovers → `infrakit drift` reports all OK, exit 0
 
 ### Phase 3 deliverables (complete)
 
@@ -153,7 +162,7 @@ docker run --rm \
 | `infrakit destroy` | Tear down all managed resources | ✅ |
 | `infrakit status` | Show current state from local state file | ✅ |
 | `infrakit init` | Scaffold a new `infrakit.yaml` interactively | ✅ |
-| `infrakit drift` | Detect out-of-band changes in AWS | ⬜ Phase 4 |
+| `infrakit drift` | Detect out-of-band changes in AWS | ✅ |
 
 ---
 
@@ -240,8 +249,8 @@ $ cat .infrakit/state.json
 }
 ```
 
-For team and CI/CD use, a remote S3+DynamoDB backend (same pattern as Terraform)
-is coming in Phase 3.
+For team and CI/CD use, switch to the remote S3+DynamoDB backend (same pattern as Terraform) —
+see the [State backend](#state-backend) config section above.
 
 ---
 

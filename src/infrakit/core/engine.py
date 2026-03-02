@@ -103,34 +103,98 @@ class Engine:
     # Public commands
     # ------------------------------------------------------------------
 
+    def plan_data(self) -> dict[str, Any]:
+        """Return the plan as a structured dict (single source of truth for plan logic).
+
+        Used by both the human-readable table output and --json output.
+        """
+        state = self._backend.load()
+        existing = set(state.get("resources", {}).keys())
+        order = creation_order(self.cfg.services)
+        creates = [
+            {"name": n, "type": self.cfg.services[n].type}
+            for n in order
+            if n not in existing
+        ]
+        deletes = [
+            {"name": n, "type": state["resources"][n].get("type", "unknown")}
+            for n in existing
+            if n not in self.cfg.services
+        ]
+        return {
+            "creates": creates,
+            "deletes": deletes,
+            "summary": f"{len(creates)} to create, {len(deletes)} to delete",
+            "has_changes": bool(creates or deletes),
+        }
+
     def plan(self) -> None:
         """Compute and display what would change without touching AWS.
 
         Creates: resources in config but not yet in state.
         Deletes: resources in state but removed from config.
-        (Config-level updates are not yet detected — requires Phase 4 drift detection.)
+        (Config-level updates are not yet detected — use ``infrakit drift`` for that.)
         """
-        state = self._backend.load()
-        existing = set(state.get("resources", {}).keys())
-
-        creates: list[tuple[str, str]] = []
-        order = creation_order(self.cfg.services)
-        for name in order:
-            if name not in existing:
-                rtype = self.cfg.services[name].type
-                creates.append((name, rtype))
-
-        deletes: list[tuple[str, str]] = []
-        for name in existing:
-            if name not in self.cfg.services:
-                stored = state["resources"][name]
-                deletes.append((name, stored.get("type", "unknown")))
-
-        if not creates and not deletes:
+        data = self.plan_data()
+        if not data["has_changes"]:
             console.print("\n  [green]No changes needed. All resources are up to date.[/green]\n")
             return
-
+        creates = [(c["name"], c["type"]) for c in data["creates"]]
+        deletes = [(d["name"], d["type"]) for d in data["deletes"]]
         print_plan_table(creates, [], deletes)
+
+    def drift(self) -> list[dict[str, Any]]:
+        """Compare state against live AWS and report out-of-band changes.
+
+        For each resource tracked in state (that is still in config), calls the
+        provider's ``exists()`` and classifies the result as OK or MISSING.
+        Resources removed from config are skipped — ``plan()`` handles those.
+        No state lock is acquired because drift is read-only.
+        """
+        state = self._backend.load()
+        resources = state.get("resources", {})
+        if not resources:
+            console.print("\n  [yellow]No resources in state. Nothing to check.[/yellow]\n")
+            return []
+
+        # Build accumulated_outputs from stored state so resolve_refs() works.
+        # All providers' exists() only need physical_name (from name/project/env),
+        # but resolving refs keeps the call consistent with how deploy() works.
+        accumulated_outputs: dict[str, dict[str, Any]] = {
+            name: entry.get("outputs", {}) for name, entry in resources.items()
+        }
+
+        results: list[dict[str, Any]] = []
+        for name, entry in resources.items():
+            rtype = entry.get("type", "unknown")
+            resource_cfg = self.cfg.services.get(name)
+            if resource_cfg is None:
+                # Resource in state but removed from config — plan() handles it.
+                logger.debug("Drift: %s in state but not in config — skipped", name)
+                continue
+            try:
+                provider = _make_provider(
+                    name, resource_cfg, self.cfg.project, self.cfg.env, self.cfg.region
+                )
+                provider.resolve_refs(accumulated_outputs)
+                if provider.exists():
+                    results.append({"name": name, "type": rtype, "status": "OK", "detail": ""})
+                else:
+                    results.append({
+                        "name": name,
+                        "type": rtype,
+                        "status": "MISSING",
+                        "detail": "Resource deleted out-of-band.",
+                    })
+            except Exception as exc:  # noqa: BLE001
+                results.append({
+                    "name": name,
+                    "type": rtype,
+                    "status": "ERROR",
+                    "detail": str(exc),
+                })
+
+        return results
 
     def deploy(self, auto_approve: bool = False) -> None:
         """Provision all resources in dependency order.
@@ -274,10 +338,18 @@ class Engine:
         if not created_names:
             return
         console.print("\n  [red]Rolling back resources created this run…[/red]")
+        failed_rollback: list[str] = []
+
         for name in reversed(created_names):
             if name not in self.cfg.services:
                 continue
             resource = self.cfg.services[name]
+            # Mark as "failed" before attempting delete so a crash during rollback
+            # leaves an observable record in state.
+            try:
+                self._backend.set_resource(name, resource.type, {}, status="failed")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not mark %s as failed in state: %s", name, exc)
             try:
                 provider = _make_provider(
                     name, resource, self.cfg.project, self.cfg.env, self.cfg.region
@@ -286,4 +358,13 @@ class Engine:
                 self._backend.remove_resource(name)
                 console.print(f"  [red]-[/red] {name} rolled back")
             except Exception as exc:  # noqa: BLE001
-                logger.error("Rollback failed for %s: %s", name, exc)
+                logger.error(
+                    "Rollback failed for %s: %s — resource may need manual cleanup", name, exc
+                )
+                failed_rollback.append(name)
+
+        if failed_rollback:
+            console.print(
+                f"\n  [red]WARNING: rollback incomplete for: {', '.join(failed_rollback)} "
+                "— manual AWS cleanup may be required.[/red]"
+            )

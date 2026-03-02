@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.table import Table
 
 from infrakit.utils.logging import console
@@ -34,4 +36,27 @@ def print_plan_table(
         f"[yellow]{len(updates)} to update[/yellow], "
         f"[red]{len(deletes)} to destroy[/red]."
     )
+    console.print()
+
+
+def print_drift_table(results: list[dict[str, Any]]) -> None:
+    """Print drift detection results as a Rich table."""
+    table = Table(title="Drift Report", show_lines=True)
+    table.add_column("Name", style="bold")
+    table.add_column("Type")
+    table.add_column("Status")
+    table.add_column("Detail")
+
+    for entry in results:
+        status = entry["status"]
+        if status == "OK":
+            status_str = "[green]OK[/green]"
+        elif status == "MISSING":
+            status_str = "[red]MISSING[/red]"
+        else:
+            status_str = "[yellow]ERROR[/yellow]"
+        table.add_row(entry["name"], entry["type"], status_str, entry.get("detail", ""))
+
+    console.print()
+    console.print(table)
     console.print()
