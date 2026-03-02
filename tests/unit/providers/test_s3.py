@@ -26,7 +26,7 @@ class TestS3Provider:
         assert "name" in outputs
         assert "arn" in outputs
         assert "bucket_url" in outputs
-        assert outputs["name"] == "myapp-dev-uploads_bucket"
+        assert outputs["name"] == "myapp-dev-uploads-bucket"
 
     def test_exists_true_after_create(self, provider: S3Provider) -> None:
         provider.create()

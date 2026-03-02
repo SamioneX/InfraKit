@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import time
 from typing import Any
 
 from botocore.exceptions import ClientError
@@ -114,7 +115,34 @@ class ECSFargateProvider(ResourceProvider):
                 }
             ]
 
-        resp = self._ecs.create_service(**service_kwargs)
+        # IAM is eventually consistent — retry if the execution role hasn't propagated yet
+        for attempt in range(6):
+            try:
+                resp = self._ecs.create_service(**service_kwargs)
+                break
+            except ClientError as exc:
+                code = exc.response["Error"]["Code"]
+                msg = exc.response["Error"]["Message"]
+                if code == "InvalidParameterException" and (
+                    "service linked role" in msg.lower() or "cannot be assumed" in msg.lower()
+                ):
+                    if attempt < 5:
+                        wait = 10 * (attempt + 1)
+                        self.logger.debug(
+                            "IAM role not yet propagated, retrying in %ss (attempt %s/5)",
+                            wait,
+                            attempt + 1,
+                        )
+                        time.sleep(wait)  # pragma: no cover
+                    else:
+                        raise
+                else:
+                    raise
+        else:
+            raise RuntimeError(  # pragma: no cover
+                f"ECS service {self.physical_name} failed to create after 6 attempts "
+                "(IAM propagation timeout)"
+            )
         service = resp["service"]
         service_arn: str = service["serviceArn"]
 
@@ -177,6 +205,15 @@ class ECSFargateProvider(ResourceProvider):
 
     def _create_security_group(self, vpc_id: str, port: int) -> str:
         sg_name = f"{self.physical_name}-ecs-sg"
+        # Reuse existing SG if a previous partial deploy left one behind
+        existing = self._ec2.describe_security_groups(
+            Filters=[
+                {"Name": "group-name", "Values": [sg_name]},
+                {"Name": "vpc-id", "Values": [vpc_id]},
+            ]
+        )
+        if existing["SecurityGroups"]:
+            return str(existing["SecurityGroups"][0]["GroupId"])
         resp = self._ec2.create_security_group(
             GroupName=sg_name,
             Description=f"InfraKit ECS SG for {self.physical_name}",

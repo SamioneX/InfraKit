@@ -30,9 +30,14 @@ class S3Provider(ResourceProvider):
     # Interface implementation
     # ------------------------------------------------------------------
 
+    @property
+    def _bucket_name(self) -> str:
+        """S3 bucket names only allow lowercase alphanumeric and hyphens (no underscores)."""
+        return self.physical_name.replace("_", "-").lower()
+
     def exists(self) -> bool:
         try:
-            self._client.head_bucket(Bucket=self.physical_name)
+            self._client.head_bucket(Bucket=self._bucket_name)
             return True
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
@@ -42,7 +47,7 @@ class S3Provider(ResourceProvider):
 
     def create(self) -> dict[str, Any]:
         cfg = self.config
-        bucket_name = self.physical_name
+        bucket_name = self._bucket_name
 
         kwargs: dict[str, Any] = {"Bucket": bucket_name}
         # us-east-1 must NOT pass CreateBucketConfiguration
@@ -100,13 +105,13 @@ class S3Provider(ResourceProvider):
 
     def delete(self) -> None:
         if not self.exists():
-            self.logger.info("Bucket %s already absent.", self.physical_name)
+            self.logger.info("Bucket %s already absent.", self._bucket_name)
             return
 
         # Must empty the bucket before deletion
-        self._empty_bucket(self.physical_name)
-        self._client.delete_bucket(Bucket=self.physical_name)
-        self.logger.info("Deleted S3 bucket: %s", self.physical_name)
+        self._empty_bucket(self._bucket_name)
+        self._client.delete_bucket(Bucket=self._bucket_name)
+        self.logger.info("Deleted S3 bucket: %s", self._bucket_name)
 
     # ------------------------------------------------------------------
     # Internal helpers

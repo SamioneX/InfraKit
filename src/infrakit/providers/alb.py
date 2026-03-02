@@ -34,9 +34,14 @@ class ALBProvider(ResourceProvider):
     # Interface implementation
     # ------------------------------------------------------------------
 
+    @property
+    def _alb_name(self) -> str:
+        """ALB names only allow alphanumeric + hyphens (no underscores)."""
+        return self.physical_name.replace("_", "-")
+
     def exists(self) -> bool:
         try:
-            resp = self._elbv2.describe_load_balancers(Names=[self.physical_name])
+            resp = self._elbv2.describe_load_balancers(Names=[self._alb_name])
             lbs = resp.get("LoadBalancers", [])
             return len(lbs) > 0
         except ClientError as exc:
@@ -60,7 +65,7 @@ class ALBProvider(ResourceProvider):
 
         # Create ALB
         resp = self._elbv2.create_load_balancer(
-            Name=self.physical_name,
+            Name=self._alb_name,
             Subnets=subnet_ids,
             SecurityGroups=[sg_id],
             Scheme=cfg.scheme,
@@ -77,7 +82,7 @@ class ALBProvider(ResourceProvider):
         self._wait_for_active(alb_arn)
 
         # Create target group (ip type for Fargate awsvpc networking)
-        tg_name = f"{self.physical_name[:28]}-tg"  # TG name max 32 chars
+        tg_name = f"{self._alb_name[:28]}-tg"  # TG name max 32 chars
         tg_resp = self._elbv2.create_target_group(
             Name=tg_name,
             Protocol="HTTP",
@@ -98,7 +103,7 @@ class ALBProvider(ResourceProvider):
             Tags=tags,
         )
 
-        self.logger.info("Created ALB: %s", self.physical_name)
+        self.logger.info("Created ALB: %s", self._alb_name)
         return {
             "id": alb_id,
             "endpoint": dns_name,
@@ -108,11 +113,11 @@ class ALBProvider(ResourceProvider):
 
     def delete(self) -> None:
         if not self.exists():
-            self.logger.info("ALB %s already absent.", self.physical_name)
+            self.logger.info("ALB %s already absent.", self._alb_name)
             return
 
         try:
-            resp = self._elbv2.describe_load_balancers(Names=[self.physical_name])
+            resp = self._elbv2.describe_load_balancers(Names=[self._alb_name])
             lb = resp["LoadBalancers"][0]
             alb_arn: str = lb["LoadBalancerArn"]
         except (ClientError, IndexError, KeyError):
@@ -136,7 +141,7 @@ class ALBProvider(ResourceProvider):
         # Delete target groups associated with this ALB
         self._delete_target_group()
 
-        self.logger.info("Deleted ALB: %s", self.physical_name)
+        self.logger.info("Deleted ALB: %s", self._alb_name)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -152,10 +157,19 @@ class ALBProvider(ResourceProvider):
         return vpc_id, subnet_ids
 
     def _create_security_group(self, vpc_id: str, port: int) -> str:
-        sg_name = f"{self.physical_name}-alb-sg"
+        sg_name = f"{self._alb_name}-alb-sg"
+        # Reuse existing SG if a previous partial deploy left one behind
+        existing = self._ec2.describe_security_groups(
+            Filters=[
+                {"Name": "group-name", "Values": [sg_name]},
+                {"Name": "vpc-id", "Values": [vpc_id]},
+            ]
+        )
+        if existing["SecurityGroups"]:
+            return str(existing["SecurityGroups"][0]["GroupId"])
         resp = self._ec2.create_security_group(
             GroupName=sg_name,
-            Description=f"InfraKit ALB SG for {self.physical_name}",
+            Description=f"InfraKit ALB SG for {self._alb_name}",
             VpcId=vpc_id,
         )
         sg_id: str = resp["GroupId"]
@@ -198,7 +212,7 @@ class ALBProvider(ResourceProvider):
 
     def _delete_target_group(self) -> None:
         """Delete the target group created for this ALB."""
-        tg_name = f"{self.physical_name[:28]}-tg"
+        tg_name = f"{self._alb_name[:28]}-tg"
         try:
             resp = self._elbv2.describe_target_groups(Names=[tg_name])
             for tg in resp.get("TargetGroups", []):

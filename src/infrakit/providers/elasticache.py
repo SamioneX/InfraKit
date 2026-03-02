@@ -40,8 +40,8 @@ class ElastiCacheProvider(ResourceProvider):
 
     @property
     def _cluster_id(self) -> str:
-        """ElastiCache cluster IDs are max 20 chars (alphanumeric + hyphens)."""
-        raw = self.physical_name[:_MAX_CLUSTER_ID].rstrip("-")
+        """ElastiCache cluster IDs are max 20 chars, alphanumeric + hyphens only."""
+        raw = self.physical_name.replace("_", "-")[:_MAX_CLUSTER_ID].rstrip("-")
         return raw
 
     @property

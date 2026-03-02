@@ -104,20 +104,20 @@ class Engine:
     # ------------------------------------------------------------------
 
     def plan(self) -> None:
-        """Compute and display what would change without touching AWS."""
+        """Compute and display what would change without touching AWS.
+
+        Creates: resources in config but not yet in state.
+        Deletes: resources in state but removed from config.
+        (Config-level updates are not yet detected — requires Phase 4 drift detection.)
+        """
         state = self._backend.load()
         existing = set(state.get("resources", {}).keys())
 
         creates: list[tuple[str, str]] = []
-        updates: list[tuple[str, str]] = []
-
         order = creation_order(self.cfg.services)
         for name in order:
-            resource = self.cfg.services[name]
-            rtype = resource.type
-            if name in existing:
-                updates.append((name, rtype))
-            else:
+            if name not in existing:
+                rtype = self.cfg.services[name].type
                 creates.append((name, rtype))
 
         deletes: list[tuple[str, str]] = []
@@ -126,11 +126,11 @@ class Engine:
                 stored = state["resources"][name]
                 deletes.append((name, stored.get("type", "unknown")))
 
-        if not creates and not updates and not deletes:
+        if not creates and not deletes:
             console.print("\n  [green]No changes needed. All resources are up to date.[/green]\n")
             return
 
-        print_plan_table(creates, updates, deletes)
+        print_plan_table(creates, [], deletes)
 
     def deploy(self, auto_approve: bool = False) -> None:
         """Provision all resources in dependency order.

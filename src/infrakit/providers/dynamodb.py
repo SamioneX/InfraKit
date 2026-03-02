@@ -75,6 +75,11 @@ class DynamoDBProvider(ResourceProvider):
         resp = self._client.create_table(**kwargs)
         table = resp["TableDescription"]
 
+        # Wait for table to be ACTIVE before any further calls
+        self._client.get_waiter("table_exists").wait(TableName=self.physical_name)
+        # Re-fetch to get final ARN / stream ARN
+        table = self._client.describe_table(TableName=self.physical_name)["Table"]
+
         # Optionally enable TTL
         if cfg.ttl_attribute:
             self._client.update_time_to_live(
@@ -93,6 +98,7 @@ class DynamoDBProvider(ResourceProvider):
             self.logger.info("Table %s already absent, nothing to do.", self.physical_name)
             return
         self._client.delete_table(TableName=self.physical_name)
+        self._client.get_waiter("table_not_exists").wait(TableName=self.physical_name)
         self.logger.info("Deleted DynamoDB table: %s", self.physical_name)
 
     # ------------------------------------------------------------------
