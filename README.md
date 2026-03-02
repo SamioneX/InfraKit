@@ -82,9 +82,18 @@ $ infrakit deploy --auto-approve
 | Phase | Goal | Status |
 |-------|------|--------|
 | **Phase 1** | Core — schema validation, 5 resource providers, deploy/destroy/plan CLI | ✅ **Complete** |
-| **Phase 2** | DX — `infrakit init`, PyPI publish, Docker image, idempotency improvements | ⬜ Next |
-| **Phase 3** | DevOps — S3+DynamoDB remote state, GitHub Action | ⬜ Planned |
+| **Phase 2** | DX — `infrakit init`, PyPI publish, Docker image, idempotency improvements | ✅ **Complete** |
+| **Phase 3** | DevOps — S3+DynamoDB remote state, GitHub Action | ⬜ Next |
 | **Phase 4** | Reliability — atomic rollback, drift detection, cost estimation | ⬜ Planned |
+
+### Phase 2 deliverables (complete)
+
+- `infrakit init` — interactive scaffolding command; generates a starter `infrakit.yaml` for `serverless-api` or `data-store` project types
+- Published to **PyPI** as [`sokech-infrakit`](https://pypi.org/project/sokech-infrakit/) — `pip install sokech-infrakit` works
+- **Multi-arch Docker image** (`linux/amd64` + `linux/arm64`) published to GHCR on every tag
+- **Deploy idempotency** — running `infrakit deploy` twice on an unchanged stack prints "All resources up to date." and exits 0; drift (resource deleted in AWS) triggers a targeted recreate
+- GitHub Actions CI on every push (Python 3.11 + 3.12), PyPI publish and Docker push on tag
+- 129 tests, 91.8% coverage, mypy strict + ruff passing
 
 ### Phase 1 deliverables (complete)
 
@@ -95,7 +104,7 @@ $ infrakit deploy --auto-approve
 - Local JSON state backend with advisory locking
 - Atomic rollback on deploy failure
 - `infrakit validate`, `infrakit plan`, `infrakit deploy`, `infrakit destroy`, `infrakit status`
-- 112 tests, 91% coverage enforced in CI
+- 115 tests, 91% coverage enforced in CI
 
 ---
 
@@ -108,12 +117,12 @@ cd InfraKit
 pip install -e ".[dev]"
 ```
 
-**pip (once published to PyPI — Phase 2)**
+**pip**
 ```bash
 pip install sokech-infrakit
 ```
 
-**Docker (Phase 2)**
+**Docker**
 ```bash
 docker run --rm \
   -v ~/.aws:/root/.aws:ro \
@@ -133,7 +142,7 @@ docker run --rm \
 | `infrakit deploy` | Provision all resources in dependency order | ✅ |
 | `infrakit destroy` | Tear down all managed resources | ✅ |
 | `infrakit status` | Show current state from local state file | ✅ |
-| `infrakit init` | Scaffold a new `infrakit.yaml` interactively | ⬜ Phase 2 |
+| `infrakit init` | Scaffold a new `infrakit.yaml` interactively | ✅ |
 | `infrakit drift` | Detect out-of-band changes in AWS | ⬜ Phase 4 |
 
 ---
