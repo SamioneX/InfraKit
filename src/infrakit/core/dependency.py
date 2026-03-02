@@ -55,10 +55,7 @@ def build_dag(services: dict[str, Any]) -> nx.DiGraph:
     graph.add_nodes_from(services.keys())
 
     for name, resource in services.items():
-        if hasattr(resource, "model_dump"):
-            raw = resource.model_dump()
-        else:
-            raw = dict(resource)
+        raw = resource.model_dump() if hasattr(resource, "model_dump") else dict(resource)
 
         for dep in extract_refs(raw):
             if dep not in services:

@@ -7,6 +7,7 @@ for concurrent CI runners (use the S3 backend for that).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tempfile
@@ -64,10 +65,8 @@ class LocalStateBackend(StateBackend):
                 json.dump(state, f, indent=2)
             os.replace(tmp_path, self._path)
         except Exception:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp_path)
-            except OSError:
-                pass
             raise
         logger.debug("State saved to %s", self._path)
 

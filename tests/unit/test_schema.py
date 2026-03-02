@@ -9,7 +9,6 @@ import pytest
 
 from infrakit.schema.models import (
     DynamoDBResource,
-    IAMRoleResource,
     InfraKitConfig,
     LambdaResource,
     LocalStateConfig,

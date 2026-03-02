@@ -10,14 +10,13 @@ The engine is the brain of InfraKit.  It:
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
 from infrakit.core.dependency import creation_order, destruction_order
 from infrakit.core.session import AWSSession
 from infrakit.providers.api_gateway import APIGatewayProvider
-from infrakit.providers.base import ResourceProvider
 from infrakit.providers.dynamodb import DynamoDBProvider
 from infrakit.providers.iam import IAMProvider
 from infrakit.providers.lambda_ import LambdaProvider
@@ -30,8 +29,11 @@ from infrakit.schema.models import (
     LambdaResource,
     S3Resource,
 )
-from infrakit.state.backend import StateBackend
 from infrakit.state.local import LocalStateBackend
+
+if TYPE_CHECKING:
+    from infrakit.providers.base import ResourceProvider
+    from infrakit.state.backend import StateBackend
 from infrakit.utils.logging import get_logger
 from infrakit.utils.output import print_plan_table
 

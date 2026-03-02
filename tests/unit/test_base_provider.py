@@ -45,8 +45,8 @@ class TestResourceProvider:
         assert provider.config.hash_key == "plain-string"
 
     def test_resolve_refs_dict_values(self, provider: _ConcreteProvider) -> None:
-        from infrakit.schema.models import LambdaResource
         from infrakit.providers.base import ResourceProvider
+        from infrakit.schema.models import LambdaResource
 
         class _LambdaLike(ResourceProvider):
             def exists(self) -> bool:

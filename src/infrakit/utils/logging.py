@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from rich.console import Console
@@ -61,7 +61,7 @@ class _JsonHandler(logging.StreamHandler):  # type: ignore[type-arg]
 
     def emit(self, record: logging.LogRecord) -> None:
         payload: dict[str, Any] = {
-            "ts": datetime.now(tz=timezone.utc).isoformat(),
+            "ts": datetime.now(tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),

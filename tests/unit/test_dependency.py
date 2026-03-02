@@ -6,7 +6,6 @@ import pytest
 
 from infrakit.core.dependency import (
     CyclicDependencyError,
-    build_dag,
     creation_order,
     destruction_order,
     extract_refs,

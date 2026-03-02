@@ -6,10 +6,9 @@ other part of InfraKit. Validation happens here — before any AWS call.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-
 
 # ---------------------------------------------------------------------------
 # State backend
@@ -29,7 +28,7 @@ class S3StateConfig(BaseModel):
 
 
 StateConfig = Annotated[
-    Union[LocalStateConfig, S3StateConfig],
+    LocalStateConfig | S3StateConfig,
     Field(discriminator="backend"),
 ]
 
@@ -52,7 +51,7 @@ class DynamoDBResource(BaseModel):
     stream: bool = False
 
     @model_validator(mode="after")
-    def _provisioned_requires_capacity(self) -> "DynamoDBResource":
+    def _provisioned_requires_capacity(self) -> DynamoDBResource:
         if self.billing == "provisioned" and (
             self.read_capacity is None or self.write_capacity is None
         ):
@@ -141,16 +140,7 @@ class ALBResource(BaseModel):
 
 # Discriminated union — Pydantic picks the right model from `type`
 AnyResource = Annotated[
-    Union[
-        DynamoDBResource,
-        LambdaResource,
-        IAMRoleResource,
-        APIGatewayResource,
-        S3Resource,
-        ECSFargateResource,
-        ElastiCacheResource,
-        ALBResource,
-    ],
+    DynamoDBResource | LambdaResource | IAMRoleResource | APIGatewayResource | S3Resource | ECSFargateResource | ElastiCacheResource | ALBResource,
     Field(discriminator="type"),
 ]
 

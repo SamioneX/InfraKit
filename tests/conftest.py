@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import boto3
 import pytest
 from moto import mock_aws
 

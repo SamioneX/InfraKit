@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import typer
@@ -141,7 +140,7 @@ def init(
 
     # 1. Project name
     default_name = Path.cwd().name.replace(" ", "-").lower()
-    project = typer.prompt(f"  Project name", default=default_name).strip()
+    project = typer.prompt("  Project name", default=default_name).strip()
     if not project:
         typer.echo("Project name cannot be empty.", err=True)
         raise typer.Exit(1)
@@ -159,7 +158,7 @@ def init(
         template_key = _TEMPLATE_LABELS[template_choice]
     except (ValueError, KeyError):
         typer.echo(f"Invalid choice: {template_choice_raw!r}. Choose 1 or 2.", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # 3. Region
     region = typer.prompt("\n  AWS region", default="us-east-1").strip()
