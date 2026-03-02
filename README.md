@@ -3,13 +3,13 @@
 > Declarative AWS infrastructure from a single YAML file.
 
 ```bash
-pip install infrakit && infrakit deploy
+pip install sokech-infrakit && infrakit deploy
 ```
 
 [![CI](https://github.com/SamioneX/InfraKit/actions/workflows/ci.yml/badge.svg)](https://github.com/SamioneX/InfraKit/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/infrakit)](https://pypi.org/project/infrakit/)
+[![PyPI](https://img.shields.io/pypi/v/sokech-infrakit)](https://pypi.org/project/sokech-infrakit/)
 [![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/SamioneX/InfraKit)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/infrakit/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/sokech-infrakit/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -110,7 +110,7 @@ pip install -e ".[dev]"
 
 **pip (once published to PyPI — Phase 2)**
 ```bash
-pip install infrakit
+pip install sokech-infrakit
 ```
 
 **Docker (Phase 2)**
@@ -119,7 +119,7 @@ docker run --rm \
   -v ~/.aws:/root/.aws:ro \
   -v $(pwd):/workspace \
   -w /workspace \
-  sokech/infrakit deploy
+  ghcr.io/samionex/infrakit deploy
 ```
 
 ---

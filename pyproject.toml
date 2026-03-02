@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "infrakit"
+name = "sokech-infrakit"
 version = "0.2.0"
 description = "Declarative AWS infrastructure deployment from a single YAML file"
 readme = "README.md"
