@@ -223,7 +223,7 @@ class TestDNSProviderHelpers:
 
     def test_cloudflare_token_empty_secret_string_raises(self, mocked_aws: None) -> None:
         secrets = AWSSession.client("secretsmanager", region_name="us-east-1")
-        secrets.create_secret(Name="/proj/cloudflare-token", SecretString="")
+        secrets.create_secret(Name="/proj/cloudflare-token", SecretString="   ")
 
         cfg = DNSResource(
             type="dns",

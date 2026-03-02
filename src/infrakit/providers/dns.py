@@ -287,7 +287,10 @@ class DNSProvider(ResourceProvider):
         token = response.get("SecretString")
         if not token:
             raise ValueError(f"Cloudflare token secret '{secret_name}' has no SecretString value.")
-        return str(token).strip()
+        token_str = str(token).strip()
+        if not token_str:
+            raise ValueError(f"Cloudflare token secret '{secret_name}' has no SecretString value.")
+        return token_str
 
     def _cloudflare_request(
         self,
