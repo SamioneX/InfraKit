@@ -16,9 +16,9 @@ pip install sokech-infrakit && infrakit deploy
 
 ## What is InfraKit?
 
-InfraKit is a CLI tool that reads an `infrakit.yaml` file and provisions the described AWS infrastructure. Think of it as a lightweight, opinionated alternative to the AWS CDK — without the boilerplate.
+InfraKit is a production-grade CLI tool that reads an `infrakit.yaml` file and provisions AWS infrastructure with the properties that matter in real deployments: idempotency, atomic rollback, drift detection, and remote state with distributed locking.
 
-Define your stack, run one command, done.
+Define your stack in YAML. Deploy, detect drift, and recover — all from the CLI.
 
 ```yaml
 # infrakit.yaml
@@ -67,10 +67,33 @@ $ infrakit plan
   Plan: 4 to create, 0 to update, 0 to destroy.
 
 $ infrakit deploy --auto-approve
-  + users_table    created
-  + api_role       created
-  + api_handler    created
-  + api_gateway    created
+  + users_table    (dynamodb)    — creating  ✓
+  + api_role       (iam-role)    — creating  ✓
+  + api_handler    (lambda)      — creating  ✓
+  + api_gateway    (api-gateway) — creating  ✓
+
+  Deploy complete.
+
+# Later — someone deletes users_table from the AWS console
+$ infrakit drift
+
+  ┌──────────────┬──────────┬─────────┬──────────────────────────────┐
+  │ Name         │ Type     │ Status  │ Detail                       │
+  ├──────────────┼──────────┼─────────┼──────────────────────────────┤
+  │ users_table  │ dynamodb │ MISSING │ Resource deleted out-of-band. │
+  │ api_role     │ iam-role │ OK      │                              │
+  │ api_handler  │ lambda   │ OK      │                              │
+  │ api_gateway  │ api-gtw  │ OK      │                              │
+  └──────────────┴──────────┴─────────┴──────────────────────────────┘
+
+  Drift detected: 1 missing, 0 error(s).
+  Run `infrakit deploy` to reconcile.
+
+$ infrakit deploy --auto-approve
+  = api_role       (iam-role)    — no changes
+  ! users_table    (dynamodb)    — drift detected, recreating  ✓
+  = api_handler    (lambda)      — no changes
+  = api_gateway    (api-gateway) — no changes
 
   Deploy complete.
 ```
@@ -154,30 +177,30 @@ docker run --rm \
 
 ## Commands
 
-| Command | Description | Status |
-|---------|-------------|--------|
-| `infrakit validate` | Validate config schema without calling AWS | ✅ |
-| `infrakit plan` | Show what would change without applying | ✅ |
-| `infrakit deploy` | Provision all resources in dependency order | ✅ |
-| `infrakit destroy` | Tear down all managed resources | ✅ |
-| `infrakit status` | Show current state from local state file | ✅ |
-| `infrakit init` | Scaffold a new `infrakit.yaml` interactively | ✅ |
-| `infrakit drift` | Detect out-of-band changes in AWS | ✅ |
+| Command | Description |
+|---------|-------------|
+| `infrakit validate` | Validate config schema without calling AWS |
+| `infrakit plan` | Show what would change without applying (`--json` for CI output) |
+| `infrakit deploy` | Provision all resources in dependency order; recovers drifted resources |
+| `infrakit destroy` | Tear down all managed resources in reverse dependency order |
+| `infrakit status` | Show current state from the state file |
+| `infrakit init` | Scaffold a new `infrakit.yaml` interactively |
+| `infrakit drift` | Compare state against live AWS; exits 1 if drift is detected |
 
 ---
 
 ## Supported Resource Types
 
-| Type | AWS Resource | Phase |
-|------|-------------|-------|
-| `dynamodb` | Amazon DynamoDB Table | ✅ Phase 1 |
-| `iam-role` | AWS IAM Role + policies | ✅ Phase 1 |
-| `lambda` | AWS Lambda Function | ✅ Phase 1 |
-| `api-gateway` | Amazon API Gateway (HTTP API v2) | ✅ Phase 1 |
-| `s3` | Amazon S3 Bucket | ✅ Phase 1 |
-| `ecs-fargate` | ECS Fargate Service + Task Definition | ✅ Phase 3 |
-| `elasticache` | ElastiCache Cluster (Redis / Memcached) | ✅ Phase 3 |
-| `alb` | Application Load Balancer | ✅ Phase 3 |
+| Type | AWS Resource |
+|------|-------------|
+| `dynamodb` | Amazon DynamoDB Table |
+| `iam-role` | AWS IAM Role + inline and managed policies |
+| `lambda` | AWS Lambda Function |
+| `api-gateway` | Amazon API Gateway (HTTP API v2) |
+| `s3` | Amazon S3 Bucket |
+| `ecs-fargate` | ECS Fargate Service + Task Definition |
+| `elasticache` | ElastiCache Cluster (Redis / Memcached) |
+| `alb` | Application Load Balancer + target group + listener |
 
 ---
 
@@ -292,7 +315,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed rationale behind key design 
 - **Pydantic v2** for schema validation — schema-as-code, human-readable errors, validated before any AWS call
 - **AWS session Singleton** — single injection point for mocking, minimal connection overhead
 - **Dependency DAG** (networkx) — automatic resource ordering, cycle detection at validation time
-- **S3 + DynamoDB state** (Phase 3) — same pattern as Terraform, safe for concurrent CI runners
+- **S3 + DynamoDB state** — same pattern as Terraform, safe for concurrent CI runners
 
 ---
 
