@@ -1,0 +1,34 @@
+project: ik-hello
+region:  us-east-1
+env:     dev
+
+state:
+  backend: local
+  path: .infrakit/state.json
+
+services:
+
+  lambda_role:
+    type: iam-role
+    assumed_by: lambda.amazonaws.com
+    policies:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  hello_fn:
+    type: lambda
+    runtime: python3.12
+    handler: handler.handler
+    code: ./src
+    memory_mb: 128
+    timeout_s: 10
+    role: !ref lambda_role.arn
+    environment:
+      GREETING: "Hello from InfraKit!"
+
+  hello_api:
+    type: api-gateway
+    integration: !ref hello_fn.arn
+    stage: dev
+    cors: true
+    routes:
+      - GET /hello

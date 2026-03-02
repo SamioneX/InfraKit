@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -71,7 +72,30 @@ class LambdaProvider(ResourceProvider):
         if cfg.layers:
             kwargs["Layers"] = cfg.layers
 
-        resp = self._client.create_function(**kwargs)
+        # IAM is eventually consistent — retry if the role hasn't propagated yet
+        for attempt in range(6):
+            try:
+                resp = self._client.create_function(**kwargs)
+                break
+            except ClientError as exc:
+                code = exc.response["Error"]["Code"]
+                msg = exc.response["Error"]["Message"]
+                if code == "InvalidParameterValueException" and "cannot be assumed" in msg:
+                    if attempt < 5:
+                        wait = 5 * (attempt + 1)
+                        self.logger.debug(
+                            "IAM role not yet propagated, retrying in %ss (attempt %s/5)",
+                            wait,
+                            attempt + 1,
+                        )
+                        time.sleep(wait)
+                    # attempt 5 (6th try): let the loop exhaust so else clause fires
+                else:
+                    raise  # non-retriable error
+        else:
+            raise RuntimeError(
+                f"Lambda {self.name}: IAM role never propagated after 5 retries"
+            )
 
         # Optionally attach EventBridge schedule
         if cfg.schedule:

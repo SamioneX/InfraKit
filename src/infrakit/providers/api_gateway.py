@@ -84,6 +84,9 @@ class APIGatewayProvider(ResourceProvider):
             AutoDeploy=True,
         )
 
+        # Grant API Gateway permission to invoke the Lambda function
+        self._add_lambda_permission(api_id, cfg.integration)
+
         self.logger.info("Created API Gateway: %s (%s)", self.physical_name, endpoint)
         return {
             "id": api_id,
@@ -110,3 +113,23 @@ class APIGatewayProvider(ResourceProvider):
                 if api["Name"] == self.physical_name:
                     return str(api["ApiId"])
         return None
+
+    def _add_lambda_permission(self, api_id: str, function_arn: str) -> None:
+        """Grant API Gateway permission to invoke the Lambda function."""
+        lambda_client = AWSSession.client("lambda", region_name=self.region)
+        # Extract account ID from Lambda ARN: arn:aws:lambda:region:account:function:name
+        account_id = function_arn.split(":")[4]
+        source_arn = f"arn:aws:execute-api:{self.region}:{account_id}:{api_id}/*/*"
+        try:
+            lambda_client.add_permission(
+                FunctionName=function_arn,
+                StatementId=f"apigateway-{api_id}",
+                Action="lambda:InvokeFunction",
+                Principal="apigateway.amazonaws.com",
+                SourceArn=source_arn,
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ResourceConflictException":
+                pass  # permission already exists — idempotent
+            else:
+                raise

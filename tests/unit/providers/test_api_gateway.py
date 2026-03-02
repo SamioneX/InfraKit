@@ -1,8 +1,10 @@
 """Unit tests for the API Gateway provider."""
 
 from __future__ import annotations
+from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from infrakit.providers.api_gateway import APIGatewayProvider
 from infrakit.providers.iam import IAMProvider
@@ -73,3 +75,17 @@ class TestAPIGatewayProvider:
         p = APIGatewayProvider("cors_api", cfg, project="proj", env="dev")
         outputs = p.create()
         assert "endpoint" in outputs
+
+    def test_add_lambda_permission_idempotent_on_conflict(
+        self, provider: APIGatewayProvider, lambda_arn: str
+    ) -> None:
+        """_add_lambda_permission silently ignores ResourceConflictException."""
+        error = ClientError(
+            {"Error": {"Code": "ResourceConflictException", "Message": "Statement already exists."}},
+            "AddPermission",
+        )
+        mock_lambda_client = MagicMock()
+        mock_lambda_client.add_permission.side_effect = error
+
+        with patch("infrakit.providers.api_gateway.AWSSession.client", return_value=mock_lambda_client):
+            provider._add_lambda_permission("api123", lambda_arn)  # must not raise

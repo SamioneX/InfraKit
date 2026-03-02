@@ -1,8 +1,10 @@
 """Unit tests for the Lambda provider."""
 
 from __future__ import annotations
+from unittest.mock import patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from infrakit.providers.iam import IAMProvider
 from infrakit.providers.lambda_ import LambdaProvider
@@ -100,3 +102,55 @@ class TestLambdaProvider:
         p = LambdaProvider("env_fn", cfg, project="proj", env="dev")
         outputs = p.create()
         assert "arn" in outputs
+
+    def test_create_retries_on_iam_propagation_lag(
+        self, provider: LambdaProvider
+    ) -> None:
+        """create() retries when IAM role hasn't propagated yet."""
+        call_count = 0
+        original_create = provider._client.create_function
+
+        def flaky_create(**kwargs: object) -> object:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ClientError(
+                    {
+                        "Error": {
+                            "Code": "InvalidParameterValueException",
+                            "Message": "The role defined for the function cannot be assumed by Lambda.",
+                        }
+                    },
+                    "CreateFunction",
+                )
+            return original_create(**kwargs)
+
+        with (
+            patch.object(provider._client, "create_function", side_effect=flaky_create),
+            patch("infrakit.providers.lambda_.time.sleep"),
+        ):
+            outputs = provider.create()
+
+        assert call_count == 2
+        assert "arn" in outputs
+
+    def test_create_raises_after_max_retries(self, provider: LambdaProvider) -> None:
+        """create() stops retrying after 6 attempts and raises RuntimeError."""
+
+        def always_fail(**kwargs: object) -> object:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "InvalidParameterValueException",
+                        "Message": "The role defined for the function cannot be assumed by Lambda.",
+                    }
+                },
+                "CreateFunction",
+            )
+
+        with (
+            patch.object(provider._client, "create_function", side_effect=always_fail),
+            patch("infrakit.providers.lambda_.time.sleep"),
+            pytest.raises(RuntimeError, match="never propagated"),
+        ):
+            provider.create()

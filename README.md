@@ -83,7 +83,7 @@ $ infrakit deploy --auto-approve
 |-------|------|--------|
 | **Phase 1** | Core — schema validation, 5 resource providers, deploy/destroy/plan CLI | ✅ **Complete** |
 | **Phase 2** | DX — `infrakit init`, PyPI publish, Docker image, idempotency improvements | ⬜ Next |
-| **Phase 3** | DevOps — S3+DynamoDB remote state, GitHub Action, SentinelAPI deployment | ⬜ Planned |
+| **Phase 3** | DevOps — S3+DynamoDB remote state, GitHub Action | ⬜ Planned |
 | **Phase 4** | Reliability — atomic rollback, drift detection, cost estimation | ⬜ Planned |
 
 ### Phase 1 deliverables (complete)
