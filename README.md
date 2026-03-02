@@ -201,6 +201,7 @@ docker run --rm \
 | `ecs-fargate` | ECS Fargate Service + Task Definition |
 | `elasticache` | ElastiCache Cluster (Redis / Memcached) |
 | `alb` | Application Load Balancer + target group + listener |
+| `dns` | DNS record via Route53 or Cloudflare |
 
 ---
 
@@ -250,7 +251,42 @@ Supported attributes per resource type:
 | `api-gateway` | `.endpoint`, `.id` |
 | `ecs-fargate` | `.name`, `.arn`, `.cluster` |
 | `elasticache` | `.name`, `.endpoint`, `.port`, `.arn` |
-| `alb` | `.id`, `.endpoint`, `.arn`, `.target_group_arn` |
+| `alb` | `.id`, `.endpoint`, `.arn`, `.hosted_zone_id`, `.target_group_arn` |
+| `dns` | `.provider`, `.zone`, `.record`, `.record_type`, `.target` |
+
+### DNS records (`dns`)
+
+```yaml
+# Route53 CNAME (minimal)
+api_dns:
+  type: dns
+  provider: route53
+  zone: sokech.com
+  record: api
+  target: !ref app_alb.endpoint
+
+# Cloudflare CNAME using token in AWS Secrets Manager
+api_dns_cf:
+  type: dns
+  provider: cloudflare
+  zone: sokech.com
+  record: api
+  target: !ref app_alb.endpoint
+  proxied: true
+  # optional override (default: /<project>/cloudflare-token)
+  cloudflare_token_secret: /sokech/cloudflare-token
+
+# Route53 alias A record (useful for apex)
+root_dns:
+  type: dns
+  provider: route53
+  zone: sokech.com
+  record: "@"
+  record_type: A
+  alias: true
+  target: !ref app_alb.endpoint
+  target_hosted_zone_id: !ref app_alb.hosted_zone_id
+```
 
 ---
 

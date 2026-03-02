@@ -108,6 +108,7 @@ class ALBProvider(ResourceProvider):
             "id": alb_id,
             "endpoint": dns_name,
             "arn": alb_arn,
+            "hosted_zone_id": lb["CanonicalHostedZoneId"],
             "target_group_arn": tg_arn,
         }
 

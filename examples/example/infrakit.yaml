@@ -1,0 +1,35 @@
+project: example-app
+region: us-east-1
+env: dev
+
+state:
+  backend: local
+  path: .infrakit/state.json
+
+services:
+  example_alb:
+    type: alb
+    port: 80
+    health_check_path: /
+    scheme: internet-facing
+
+  example_service:
+    type: ecs-fargate
+    image: hashicorp/http-echo:1.0.0
+    command:
+      - "-text=Hello! You successfully reached example.sokech.com"
+    cpu: 256
+    memory_mb: 512
+    port: 5678
+    desired_count: 1
+    load_balancer: !ref example_alb.target_group_arn
+
+  example_dns:
+    type: dns
+    provider: cloudflare
+    zone: sokech.com
+    record: example
+    record_type: CNAME
+    target: !ref example_alb.endpoint
+    proxied: false
+    cloudflare_token_secret: /sokech/cloudflare-token

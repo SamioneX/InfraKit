@@ -75,6 +75,8 @@ class ECSFargateProvider(ResourceProvider):
             "environment": [{"name": k, "value": v} for k, v in cfg.environment.items()],
             "essential": True,
         }
+        if cfg.command:
+            container_def["command"] = cfg.command
 
         task_kwargs: dict[str, Any] = {
             "family": self.physical_name,

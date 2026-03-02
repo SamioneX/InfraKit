@@ -19,6 +19,7 @@ from infrakit.core.session import AWSSession
 from infrakit.providers.alb import ALBProvider
 from infrakit.providers.api_gateway import APIGatewayProvider
 from infrakit.providers.base import ResourceProvider
+from infrakit.providers.dns import DNSProvider
 from infrakit.providers.dynamodb import DynamoDBProvider
 from infrakit.providers.ecs import ECSFargateProvider
 from infrakit.providers.elasticache import ElastiCacheProvider
@@ -28,6 +29,7 @@ from infrakit.providers.s3 import S3Provider
 from infrakit.schema.models import (
     ALBResource,
     APIGatewayResource,
+    DNSResource,
     DynamoDBResource,
     ECSFargateResource,
     ElastiCacheResource,
@@ -58,6 +60,8 @@ def _make_provider(
     """Factory — returns the correct provider for *resource*."""
     if isinstance(resource, DynamoDBResource):
         return DynamoDBProvider(name, resource, project, env, region)
+    if isinstance(resource, DNSResource):
+        return DNSProvider(name, resource, project, env, region)
     if isinstance(resource, IAMRoleResource):
         return IAMProvider(name, resource, project, env, region)
     if isinstance(resource, LambdaResource):
@@ -112,9 +116,7 @@ class Engine:
         existing = set(state.get("resources", {}).keys())
         order = creation_order(self.cfg.services)
         creates = [
-            {"name": n, "type": self.cfg.services[n].type}
-            for n in order
-            if n not in existing
+            {"name": n, "type": self.cfg.services[n].type} for n in order if n not in existing
         ]
         deletes = [
             {"name": n, "type": state["resources"][n].get("type", "unknown")}
@@ -180,19 +182,23 @@ class Engine:
                 if provider.exists():
                     results.append({"name": name, "type": rtype, "status": "OK", "detail": ""})
                 else:
-                    results.append({
+                    results.append(
+                        {
+                            "name": name,
+                            "type": rtype,
+                            "status": "MISSING",
+                            "detail": "Resource deleted out-of-band.",
+                        }
+                    )
+            except Exception as exc:  # noqa: BLE001
+                results.append(
+                    {
                         "name": name,
                         "type": rtype,
-                        "status": "MISSING",
-                        "detail": "Resource deleted out-of-band.",
-                    })
-            except Exception as exc:  # noqa: BLE001
-                results.append({
-                    "name": name,
-                    "type": rtype,
-                    "status": "ERROR",
-                    "detail": str(exc),
-                })
+                        "status": "ERROR",
+                        "detail": str(exc),
+                    }
+                )
 
         return results
 
@@ -213,8 +219,7 @@ class Engine:
             state.setdefault("resources", {})
             existing_state = state["resources"]
             accumulated_outputs: dict[str, dict[str, Any]] = {
-                name: entry["outputs"]
-                for name, entry in existing_state.items()
+                name: entry["outputs"] for name, entry in existing_state.items()
             }
 
             order = creation_order(self.cfg.services)
@@ -257,9 +262,7 @@ class Engine:
             self._backend.unlock(run_id)
 
         if changes_made == 0:
-            console.print(
-                "\n  [bold green]All resources up to date.[/bold green]\n"
-            )
+            console.print("\n  [bold green]All resources up to date.[/bold green]\n")
         else:
             console.print("\n  [bold green]Deploy complete.[/bold green]\n")
 

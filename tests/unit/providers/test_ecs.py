@@ -92,3 +92,16 @@ class TestECSFargateProvider:
         p = ECSFargateProvider("svc", cfg, project="proj", env="dev")
         outputs = p.create()
         assert outputs["name"] == "proj-dev-svc"
+
+    def test_create_with_command(self, mocked_aws: None) -> None:
+        cfg = ECSFargateResource(
+            type="ecs-fargate",  # type: ignore[arg-type]
+            image="hashicorp/http-echo:1.0.0",
+            command=["-text=hello"],
+            cpu=256,
+            memory_mb=512,
+            port=5678,
+        )
+        p = ECSFargateProvider("svc_cmd", cfg, project="proj", env="dev")
+        outputs = p.create()
+        assert outputs["name"] == "proj-dev-svc_cmd"

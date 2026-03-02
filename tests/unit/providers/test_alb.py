@@ -31,6 +31,7 @@ class TestALBProvider:
         assert "id" in outputs
         assert "endpoint" in outputs
         assert "arn" in outputs
+        assert "hosted_zone_id" in outputs
         assert "target_group_arn" in outputs
         assert "elasticloadbalancing" in outputs["arn"]
         assert "arn:aws:elasticloadbalancing" in outputs["target_group_arn"]

@@ -55,9 +55,7 @@ class DynamoDBResource(BaseModel):
         if self.billing == "provisioned" and (
             self.read_capacity is None or self.write_capacity is None
         ):
-            raise ValueError(
-                "billing=provisioned requires read_capacity and write_capacity"
-            )
+            raise ValueError("billing=provisioned requires read_capacity and write_capacity")
         return self
 
 
@@ -115,6 +113,7 @@ class S3Resource(BaseModel):
 class ECSFargateResource(BaseModel):
     type: Literal["ecs-fargate"]
     image: str
+    command: list[str] = Field(default_factory=list)
     cpu: int = Field(default=256, description="vCPU units (256 = 0.25 vCPU)")
     memory_mb: int = Field(default=512)
     port: int = Field(default=8080, ge=1, le=65535)
@@ -139,9 +138,49 @@ class ALBResource(BaseModel):
     scheme: Literal["internet-facing", "internal"] = "internet-facing"
 
 
+class DNSResource(BaseModel):
+    type: Literal["dns"]
+    provider: Literal["route53", "cloudflare"] = "route53"
+    zone: str
+    record: str = "@"
+    target: str
+    record_type: Literal["CNAME", "A", "AAAA", "TXT"] = "CNAME"
+    ttl: int = Field(default=300, ge=60, le=86400)
+    proxied: bool = False
+    alias: bool = False
+    target_hosted_zone_id: str | None = None
+    evaluate_target_health: bool = False
+    cloudflare_token_secret: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_dns_settings(self) -> DNSResource:
+        if self.alias:
+            if self.provider != "route53":
+                raise ValueError("alias is only supported with provider=route53")
+            if self.record_type != "A":
+                raise ValueError("alias=true requires record_type=A")
+            if not self.target_hosted_zone_id:
+                raise ValueError("alias=true requires target_hosted_zone_id")
+        if self.provider == "route53" and self.proxied:
+            raise ValueError("proxied is only supported with provider=cloudflare")
+        if self.provider == "cloudflare" and self.target_hosted_zone_id:
+            raise ValueError("target_hosted_zone_id is only supported with provider=route53")
+        if self.zone.endswith("."):
+            self.zone = self.zone[:-1]
+        return self
+
+
 # Discriminated union — Pydantic picks the right model from `type`
 AnyResource = Annotated[
-    DynamoDBResource | LambdaResource | IAMRoleResource | APIGatewayResource | S3Resource | ECSFargateResource | ElastiCacheResource | ALBResource,
+    DynamoDBResource
+    | LambdaResource
+    | IAMRoleResource
+    | APIGatewayResource
+    | S3Resource
+    | ECSFargateResource
+    | ElastiCacheResource
+    | ALBResource
+    | DNSResource,
     Field(discriminator="type"),
 ]
 

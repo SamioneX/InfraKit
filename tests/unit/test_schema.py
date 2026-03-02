@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from infrakit.schema.models import (
+    DNSResource,
     DynamoDBResource,
     InfraKitConfig,
     LambdaResource,
@@ -83,6 +84,37 @@ class TestLambdaResource:
     def test_timeout_bounds(self) -> None:
         with pytest.raises(Exception):
             LambdaResource(type="lambda", handler="h", timeout_s=0)
+
+
+class TestDNSResource:
+    def test_defaults_are_valid(self) -> None:
+        r = DNSResource(type="dns", zone="example.com", target="alb.example.net")
+        assert r.provider == "route53"
+        assert r.record_type == "CNAME"
+        assert r.record == "@"
+
+    def test_alias_requires_route53_a_and_hosted_zone(self) -> None:
+        with pytest.raises(Exception, match="target_hosted_zone_id"):
+            DNSResource(
+                type="dns",
+                provider="route53",
+                zone="example.com",
+                record="api",
+                target="my-alb.us-east-1.elb.amazonaws.com",
+                alias=True,
+                record_type="A",
+            )
+
+    def test_proxied_rejected_for_route53(self) -> None:
+        with pytest.raises(Exception, match="proxied"):
+            DNSResource(
+                type="dns",
+                provider="route53",
+                zone="example.com",
+                record="api",
+                target="x.example.net",
+                proxied=True,
+            )
 
 
 # ---------------------------------------------------------------------------

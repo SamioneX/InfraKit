@@ -5,6 +5,7 @@ Each subdirectory is a self-contained example with its own `infrakit.yaml` and a
 | Example | Resources | Description |
 |---------|-----------|-------------|
 | [hello-api](hello-api/) | IAM role + Lambda + API Gateway | Minimal serverless HTTP API |
+| [example](example/) | ALB + ECS Fargate + DNS (Cloudflare) | Public hello service at `example.sokech.com` |
 
 ## General usage pattern
 
