@@ -104,9 +104,7 @@ class TestLambdaProvider:
         outputs = p.create()
         assert "arn" in outputs
 
-    def test_create_retries_on_iam_propagation_lag(
-        self, provider: LambdaProvider
-    ) -> None:
+    def test_create_retries_on_iam_propagation_lag(self, provider: LambdaProvider) -> None:
         """create() retries when IAM role hasn't propagated yet."""
         call_count = 0
         original_create = provider._client.create_function
@@ -155,3 +153,20 @@ class TestLambdaProvider:
             pytest.raises(RuntimeError, match="never propagated"),
         ):
             provider.create()
+
+    def test_create_with_function_url_outputs_url(self, mocked_aws: None, role_arn: str) -> None:
+        cfg = LambdaResource(
+            type="lambda",
+            handler="h.handler",
+            runtime="python3.12",
+            role=role_arn,
+            function_url=True,
+        )
+        p = LambdaProvider("url_fn", cfg, project="proj", env="dev")
+        with patch.object(
+            p,
+            "_ensure_function_url",
+            return_value="https://abc.lambda-url.us-east-1.on.aws/",
+        ):
+            outputs = p.create()
+        assert outputs["function_url"] == "https://abc.lambda-url.us-east-1.on.aws/"

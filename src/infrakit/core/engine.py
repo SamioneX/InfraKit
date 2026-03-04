@@ -9,6 +9,7 @@ The engine is the brain of InfraKit.  It:
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -50,6 +51,38 @@ from infrakit.utils.output import print_plan_table
 
 logger = get_logger(__name__)
 console = Console()
+_REF_RE = re.compile(r"^!ref\s+(\w[\w.-]*)$")
+
+
+def _enable_lambda_function_urls_for_refs(services: dict[str, Any]) -> None:
+    """Auto-enable Lambda Function URL when `!ref <lambda>.function_url` is used."""
+
+    def _scan(value: Any) -> list[str]:
+        refs: list[str] = []
+        if isinstance(value, str):
+            m = _REF_RE.match(value)
+            if m:
+                refs.append(m.group(1))
+        elif isinstance(value, dict):
+            for nested in value.values():
+                refs.extend(_scan(nested))
+        elif isinstance(value, list):
+            for nested in value:
+                refs.extend(_scan(nested))
+        return refs
+
+    lambda_names_needing_urls: set[str] = set()
+    for service in services.values():
+        raw = service.model_dump() if hasattr(service, "model_dump") else dict(service)
+        for ref_path in _scan(raw):
+            resource_name, _, attr = ref_path.partition(".")
+            if attr == "function_url":
+                lambda_names_needing_urls.add(resource_name)
+
+    for lambda_name in lambda_names_needing_urls:
+        resource = services.get(lambda_name)
+        if isinstance(resource, LambdaResource):
+            resource.function_url = True
 
 
 def _make_provider(
@@ -104,6 +137,7 @@ class Engine:
 
     def __init__(self, cfg: InfraKitConfig) -> None:
         self.cfg = cfg
+        _enable_lambda_function_urls_for_refs(self.cfg.services)
         AWSSession.configure(region=cfg.region)
         self._backend = _make_state_backend(cfg)
 

@@ -10,6 +10,8 @@ import pytest
 from typer.testing import CliRunner
 
 from infrakit.cli.main import app
+from infrakit.core.engine import Engine
+from infrakit.schema.models import LambdaResource
 from infrakit.schema.validator import load_config
 
 runner = CliRunner()
@@ -39,21 +41,15 @@ def simple_cfg(tmp_path: Path) -> Path:
 
 
 class TestDeployIdempotency:
-    def test_second_deploy_shows_no_changes(
-        self, mocked_aws: None, simple_cfg: Path
-    ) -> None:
+    def test_second_deploy_shows_no_changes(self, mocked_aws: None, simple_cfg: Path) -> None:
         """Running deploy twice on an unchanged config outputs 'up to date'."""
         # First deploy — creates the resource
-        result1 = runner.invoke(
-            app, ["deploy", "--config", str(simple_cfg), "--auto-approve"]
-        )
+        result1 = runner.invoke(app, ["deploy", "--config", str(simple_cfg), "--auto-approve"])
         assert result1.exit_code == 0
         assert "creating" in result1.stdout.lower()
 
         # Second deploy — resource already exists, should be a no-op
-        result2 = runner.invoke(
-            app, ["deploy", "--config", str(simple_cfg), "--auto-approve"]
-        )
+        result2 = runner.invoke(app, ["deploy", "--config", str(simple_cfg), "--auto-approve"])
         assert result2.exit_code == 0
         assert "up to date" in result2.stdout.lower()
         assert "creating" not in result2.stdout.lower()
@@ -75,9 +71,7 @@ class TestDeployIdempotency:
             return original_create(self)
 
         with patch.object(DynamoDBProvider, "create", tracking_create):
-            result = runner.invoke(
-                app, ["deploy", "--config", str(simple_cfg), "--auto-approve"]
-            )
+            result = runner.invoke(app, ["deploy", "--config", str(simple_cfg), "--auto-approve"])
 
         assert result.exit_code == 0
         assert create_calls == [], f"create() was unexpectedly called for: {create_calls}"
@@ -93,13 +87,12 @@ class TestDeployIdempotency:
 
         # Simulate drift: delete the table directly via AWS without updating state
         from infrakit.core.session import AWSSession
+
         client = AWSSession.client("dynamodb")
         client.delete_table(TableName="idem-test-dev-items_table")
 
         # Deploy again — should detect drift and recreate
-        result = runner.invoke(
-            app, ["deploy", "--config", str(simple_cfg), "--auto-approve"]
-        )
+        result = runner.invoke(app, ["deploy", "--config", str(simple_cfg), "--auto-approve"])
         assert result.exit_code == 0
         assert "drift" in result.stdout.lower() or "recreating" in result.stdout.lower()
 
@@ -118,18 +111,52 @@ class TestDeployIdempotency:
     ) -> None:
         """The specific 'All resources up to date.' message appears on second deploy."""
         runner.invoke(app, ["deploy", "--config", str(simple_cfg), "--auto-approve"])
-        result = runner.invoke(
-            app, ["deploy", "--config", str(simple_cfg), "--auto-approve"]
-        )
+        result = runner.invoke(app, ["deploy", "--config", str(simple_cfg), "--auto-approve"])
         assert "All resources up to date" in result.stdout
 
-    def test_first_deploy_shows_creating(
-        self, mocked_aws: None, simple_cfg: Path
-    ) -> None:
+    def test_first_deploy_shows_creating(self, mocked_aws: None, simple_cfg: Path) -> None:
         """The first deploy shows 'creating' for new resources."""
-        result = runner.invoke(
-            app, ["deploy", "--config", str(simple_cfg), "--auto-approve"]
-        )
+        result = runner.invoke(app, ["deploy", "--config", str(simple_cfg), "--auto-approve"])
         assert result.exit_code == 0
         assert "creating" in result.stdout.lower()
         assert "Deploy complete" in result.stdout
+
+    def test_lambda_function_url_auto_enabled_when_referenced(self, tmp_path: Path) -> None:
+        cfg_file = tmp_path / "infrakit.yaml"
+        cfg_file.write_text(
+            textwrap.dedent(
+                f"""\
+                project: url-ref-test
+                region: us-east-1
+                env: dev
+                state:
+                  backend: local
+                  path: {tmp_path}/.infrakit/state.json
+                services:
+                  lambda_role:
+                    type: iam-role
+                    assumed_by: lambda.amazonaws.com
+                    policies: []
+                  upstream_fn:
+                    type: lambda
+                    runtime: python3.12
+                    handler: handler.handler
+                    role: !ref lambda_role.arn
+                  upstream_dns:
+                    type: dns
+                    provider: route53
+                    zone: example.com
+                    record: api
+                    record_type: CNAME
+                    target: !ref upstream_fn.function_url
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        cfg = load_config(cfg_file)
+        assert isinstance(cfg.services["upstream_fn"], LambdaResource)
+        assert cfg.services["upstream_fn"].function_url is False
+
+        Engine(cfg)
+        assert cfg.services["upstream_fn"].function_url is True

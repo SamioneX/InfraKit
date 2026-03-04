@@ -70,6 +70,7 @@ class LambdaResource(BaseModel):
     role: str | None = None  # !ref or ARN
     layers: list[str] = Field(default_factory=list)
     schedule: str | None = None  # EventBridge schedule expression
+    function_url: bool = False
 
     @field_validator("runtime")
     @classmethod

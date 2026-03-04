@@ -246,7 +246,7 @@ Supported attributes per resource type:
 | Type | Attributes |
 |------|-----------|
 | `dynamodb` | `.name`, `.arn`, `.stream_arn` |
-| `lambda` | `.name`, `.arn`, `.function_name` |
+| `lambda` | `.name`, `.arn`, `.function_name`, `.function_url` |
 | `iam-role` | `.arn`, `.name` |
 | `s3` | `.name`, `.arn`, `.bucket_url` |
 | `api-gateway` | `.endpoint`, `.id` |
@@ -255,6 +255,9 @@ Supported attributes per resource type:
 | `alb` | `.id`, `.endpoint`, `.arn`, `.hosted_zone_id`, `.target_group_arn` |
 | `dns` | `.provider`, `.zone`, `.record`, `.record_type`, `.target` |
 | `sentinelapi` | `.alb_dns_name`, `.service_url`, `.ecs_cluster_name`, `.ecs_service_name`, `.request_logs_table_name` |
+
+When a resource references `!ref <lambda>.function_url`, InfraKit automatically enables
+Lambda Function URL creation for that Lambda during deploy.
 
 ### DNS records (`dns`)
 

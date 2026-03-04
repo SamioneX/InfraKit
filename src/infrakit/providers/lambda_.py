@@ -93,20 +93,25 @@ class LambdaProvider(ResourceProvider):
                 else:
                     raise  # non-retriable error
         else:
-            raise RuntimeError(
-                f"Lambda {self.name}: IAM role never propagated after 5 retries"
-            )
+            raise RuntimeError(f"Lambda {self.name}: IAM role never propagated after 5 retries")
 
         # Optionally attach EventBridge schedule
         if cfg.schedule:
             self._create_schedule(resp["FunctionArn"], cfg.schedule)
 
+        function_url = ""
+        if cfg.function_url:
+            function_url = self._ensure_function_url()
+
         self.logger.info("Created Lambda function: %s", self.physical_name)
-        return {
+        outputs: dict[str, Any] = {
             "name": resp["FunctionName"],
             "arn": resp["FunctionArn"],
             "function_name": resp["FunctionName"],
         }
+        if function_url:
+            outputs["function_url"] = function_url
+        return outputs
 
     def delete(self) -> None:
         if not self.exists():
@@ -137,11 +142,14 @@ class LambdaProvider(ResourceProvider):
         self._client.update_function_configuration(**update_kwargs)
 
         resp = self._client.get_function_configuration(FunctionName=self.physical_name)
-        return {
+        outputs: dict[str, Any] = {
             "name": resp["FunctionName"],
             "arn": resp["FunctionArn"],
             "function_name": resp["FunctionName"],
         }
+        if self.config.function_url:
+            outputs["function_url"] = self._ensure_function_url()
+        return outputs
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -185,3 +193,32 @@ class LambdaProvider(ResourceProvider):
             Principal="events.amazonaws.com",
             SourceArn=rule_resp["RuleArn"],
         )
+
+    def _ensure_function_url(self) -> str:
+        """Create (or fetch) a Lambda Function URL with public auth (NONE)."""
+        try:
+            resp = self._client.create_function_url_config(
+                FunctionName=self.physical_name,
+                AuthType="NONE",
+            )
+            function_url = str(resp["FunctionUrl"])
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] != "ResourceConflictException":
+                raise
+            existing = self._client.get_function_url_config(FunctionName=self.physical_name)
+            function_url = str(existing["FunctionUrl"])
+
+        # Allow unauthenticated invocation for Function URL.
+        try:
+            self._client.add_permission(
+                FunctionName=self.physical_name,
+                StatementId="function-url-public",
+                Action="lambda:InvokeFunctionUrl",
+                Principal="*",
+                FunctionUrlAuthType="NONE",
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] != "ResourceConflictException":
+                raise
+
+        return function_url
