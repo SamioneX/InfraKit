@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from botocore.exceptions import ClientError
 
@@ -166,10 +167,13 @@ class SentinelAPIProvider(ResourceProvider):
     @staticmethod
     def _load_sdk() -> tuple[SDKDeployFn, SDKDeployFn, SDKTeardownFn]:
         try:
-            from sentinel_api import deploy_foundation, deploy_full, teardown_stack
+            module = importlib.import_module("sentinel_api")
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError(
                 "sentinel-api package is required for type=sentinelapi. "
                 'Install dependencies with `pip install -e ".[dev]"`.'
             ) from exc
+        deploy_full = cast(SDKDeployFn, module.deploy_full)
+        deploy_foundation = cast(SDKDeployFn, module.deploy_foundation)
+        teardown_stack = cast(SDKTeardownFn, module.teardown_stack)
         return deploy_full, deploy_foundation, teardown_stack
