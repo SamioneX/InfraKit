@@ -202,6 +202,7 @@ docker run --rm \
 | `elasticache` | ElastiCache Cluster (Redis / Memcached) |
 | `alb` | Application Load Balancer + target group + listener |
 | `dns` | DNS record via Route53 or Cloudflare |
+| `sentinelapi` | SentinelAPI edge gateway stack via `sentinel-api` SDK |
 
 ---
 
@@ -253,6 +254,7 @@ Supported attributes per resource type:
 | `elasticache` | `.name`, `.endpoint`, `.port`, `.arn` |
 | `alb` | `.id`, `.endpoint`, `.arn`, `.hosted_zone_id`, `.target_group_arn` |
 | `dns` | `.provider`, `.zone`, `.record`, `.record_type`, `.target` |
+| `sentinelapi` | `.alb_dns_name`, `.service_url`, `.ecs_cluster_name`, `.ecs_service_name`, `.request_logs_table_name` |
 
 ### DNS records (`dns`)
 
@@ -286,6 +288,27 @@ root_dns:
   alias: true
   target: !ref app_alb.endpoint
   target_hosted_zone_id: !ref app_alb.hosted_zone_id
+```
+
+### SentinelAPI (`sentinelapi`)
+
+```yaml
+sentinel:
+  type: sentinelapi
+  mode: full
+  upstream_base_url: https://backend.example.com
+  jwt:
+    jwks_url: https://idp.example.com/.well-known/jwks.json
+    algorithm: RS256
+  optimize_for: cost
+
+sentinel_dns:
+  type: dns
+  provider: route53
+  zone: example.com
+  record: api-sentinel
+  record_type: CNAME
+  target: !ref sentinel.alb_dns_name
 ```
 
 ---

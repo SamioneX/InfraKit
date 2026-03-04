@@ -6,6 +6,7 @@ Each subdirectory is a self-contained example with its own `infrakit.yaml` and a
 |---------|-----------|-------------|
 | [hello-api](hello-api/) | IAM role + Lambda + API Gateway | Minimal serverless HTTP API |
 | [example](example/) | ALB + ECS Fargate + DNS (Cloudflare) | Public hello service at `example.sokech.com` |
+| [sentinelapi](sentinelapi/) | SentinelAPI + DNS | Deploy SentinelAPI edge gateway and map DNS to ALB |
 
 ## General usage pattern
 

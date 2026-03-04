@@ -1,0 +1,25 @@
+project: sentinel-demo
+region: us-east-1
+env: dev
+
+state:
+  backend: local
+  path: .infrakit/state.json
+
+services:
+  sentinel:
+    type: sentinelapi
+    mode: full
+    upstream_base_url: https://example.com
+    jwt:
+      secret_key: /myapp/sentinel-jwt-secret
+      algorithm: HS256
+    optimize_for: cost
+
+  sentinel_dns:
+    type: dns
+    provider: route53
+    zone: example.com
+    record: api-sentinel
+    record_type: CNAME
+    target: !ref sentinel.alb_dns_name

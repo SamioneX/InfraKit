@@ -26,6 +26,7 @@ from infrakit.providers.elasticache import ElastiCacheProvider
 from infrakit.providers.iam import IAMProvider
 from infrakit.providers.lambda_ import LambdaProvider
 from infrakit.providers.s3 import S3Provider
+from infrakit.providers.sentinelapi import SentinelAPIProvider
 from infrakit.schema.models import (
     ALBResource,
     APIGatewayResource,
@@ -39,6 +40,7 @@ from infrakit.schema.models import (
     LocalStateConfig,
     S3Resource,
     S3StateConfig,
+    SentinelAPIResource,
 )
 from infrakit.state.backend import StateBackend
 from infrakit.state.local import LocalStateBackend
@@ -62,6 +64,8 @@ def _make_provider(
         return DynamoDBProvider(name, resource, project, env, region)
     if isinstance(resource, DNSResource):
         return DNSProvider(name, resource, project, env, region)
+    if isinstance(resource, SentinelAPIResource):
+        return SentinelAPIProvider(name, resource, project, env, region)
     if isinstance(resource, IAMRoleResource):
         return IAMProvider(name, resource, project, env, region)
     if isinstance(resource, LambdaResource):

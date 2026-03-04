@@ -13,6 +13,7 @@ from infrakit.schema.models import (
     InfraKitConfig,
     LambdaResource,
     LocalStateConfig,
+    SentinelAPIResource,
 )
 from infrakit.schema.validator import ConfigError, load_config, validate_refs
 
@@ -114,6 +115,25 @@ class TestDNSResource:
                 record="api",
                 target="x.example.net",
                 proxied=True,
+            )
+
+
+class TestSentinelAPIResource:
+    def test_minimal_valid_sentinel_resource(self) -> None:
+        r = SentinelAPIResource(
+            type="sentinelapi",
+            upstream_base_url="https://backend.example.com",
+            jwt={"jwks_url": "https://idp.example.com/.well-known/jwks.json"},
+        )
+        assert r.optimize_for == "cost"
+        assert r.mode == "full"
+
+    def test_sentinel_requires_jwt_source(self) -> None:
+        with pytest.raises(Exception, match="jwt"):
+            SentinelAPIResource(
+                type="sentinelapi",
+                upstream_base_url="https://backend.example.com",
+                jwt={},
             )
 
 

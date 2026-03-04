@@ -170,6 +170,65 @@ class DNSResource(BaseModel):
         return self
 
 
+class SentinelJWTConfig(BaseModel):
+    secret_key: str | None = None
+    public_key: str | None = None
+    jwks_url: str | None = None
+    algorithm: str = "HS256"
+
+    @model_validator(mode="after")
+    def _has_verification_source(self) -> SentinelJWTConfig:
+        if not any(
+            [
+                self.secret_key and self.secret_key.strip(),
+                self.public_key and self.public_key.strip(),
+                self.jwks_url and self.jwks_url.strip(),
+            ]
+        ):
+            raise ValueError("jwt must define at least one of: secret_key, public_key, jwks_url")
+        return self
+
+
+class SentinelFargateConfig(BaseModel):
+    cpu: int | None = Field(default=None, ge=256)
+    memory_mib: int | None = Field(default=None, ge=512)
+    desired_count: int | None = Field(default=None, ge=1)
+
+
+class SentinelRateLimitConfig(BaseModel):
+    capacity: int | None = Field(default=None, ge=1)
+    refill_rate: float | None = Field(default=None, gt=0)
+
+
+class SentinelAnomalyConfig(BaseModel):
+    threshold: float | None = Field(default=None, gt=0)
+    min_requests: int | None = Field(default=None, ge=1)
+    auto_block: bool | None = None
+    auto_block_ttl_seconds: int | None = Field(default=None, ge=1)
+
+
+class SentinelObservabilityConfig(BaseModel):
+    log_retention_days: int | None = Field(default=None, ge=1)
+    request_timeout_seconds: int | None = Field(default=None, ge=1)
+
+
+class SentinelAPIResource(BaseModel):
+    type: Literal["sentinelapi"]
+    mode: Literal["full", "foundation"] = "full"
+    upstream_base_url: str = Field(..., min_length=1)
+    jwt: SentinelJWTConfig
+    optimize_for: Literal["cost", "performance"] = "cost"
+    fargate: SentinelFargateConfig = Field(default_factory=SentinelFargateConfig)
+    rate_limit: SentinelRateLimitConfig = Field(default_factory=SentinelRateLimitConfig)
+    anomaly: SentinelAnomalyConfig = Field(default_factory=SentinelAnomalyConfig)
+    observability: SentinelObservabilityConfig = Field(default_factory=SentinelObservabilityConfig)
+    artifacts_bucket: str | None = None
+    gateway_image_uri: str | None = None
+    build_gateway_image: bool = False
+    gateway_image_repository: str | None = None
+    gateway_image_tag: str | None = None
+
+
 # Discriminated union — Pydantic picks the right model from `type`
 AnyResource = Annotated[
     DynamoDBResource
@@ -180,7 +239,8 @@ AnyResource = Annotated[
     | ECSFargateResource
     | ElastiCacheResource
     | ALBResource
-    | DNSResource,
+    | DNSResource
+    | SentinelAPIResource,
     Field(discriminator="type"),
 ]
 
