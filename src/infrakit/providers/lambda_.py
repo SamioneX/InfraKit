@@ -221,4 +221,17 @@ class LambdaProvider(ResourceProvider):
             if exc.response["Error"]["Code"] != "ResourceConflictException":
                 raise
 
+        # Also allow Lambda invoke only when it comes through Function URL.
+        try:
+            self._client.add_permission(
+                FunctionName=self.physical_name,
+                StatementId="function-url-public-invoke",
+                Action="lambda:InvokeFunction",
+                Principal="*",
+                InvokedViaFunctionUrl=True,
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] != "ResourceConflictException":
+                raise
+
         return function_url

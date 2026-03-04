@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 from botocore.exceptions import ClientError
@@ -170,3 +170,65 @@ class TestLambdaProvider:
         ):
             outputs = p.create()
         assert outputs["function_url"] == "https://abc.lambda-url.us-east-1.on.aws/"
+
+    def test_ensure_function_url_adds_required_permissions(
+        self, mocked_aws: None, role_arn: str
+    ) -> None:
+        cfg = LambdaResource(type="lambda", handler="h.handler", runtime="python3.12", role=role_arn)
+        p = LambdaProvider("url_permissions_fn", cfg, project="proj", env="dev")
+
+        with (
+            patch.object(
+                p._client,
+                "create_function_url_config",
+                return_value={"FunctionUrl": "https://abc.lambda-url.us-east-1.on.aws/"},
+            ),
+            patch.object(p._client, "add_permission") as add_permission,
+        ):
+            function_url = p._ensure_function_url()
+
+        assert function_url == "https://abc.lambda-url.us-east-1.on.aws/"
+        assert add_permission.call_count == 2
+        add_permission.assert_has_calls(
+            [
+                call(
+                    FunctionName=p.physical_name,
+                    StatementId="function-url-public",
+                    Action="lambda:InvokeFunctionUrl",
+                    Principal="*",
+                    FunctionUrlAuthType="NONE",
+                ),
+                call(
+                    FunctionName=p.physical_name,
+                    StatementId="function-url-public-invoke",
+                    Action="lambda:InvokeFunction",
+                    Principal="*",
+                    InvokedViaFunctionUrl=True,
+                ),
+            ],
+            any_order=False,
+        )
+
+    def test_ensure_function_url_uses_existing_url_on_conflict(
+        self, mocked_aws: None, role_arn: str
+    ) -> None:
+        cfg = LambdaResource(type="lambda", handler="h.handler", runtime="python3.12", role=role_arn)
+        p = LambdaProvider("url_conflict_fn", cfg, project="proj", env="dev")
+        conflict = ClientError(
+            {"Error": {"Code": "ResourceConflictException", "Message": "exists"}},
+            "CreateFunctionUrlConfig",
+        )
+
+        with (
+            patch.object(p._client, "create_function_url_config", side_effect=conflict),
+            patch.object(
+                p._client,
+                "get_function_url_config",
+                return_value={"FunctionUrl": "https://existing.lambda-url.us-east-1.on.aws/"},
+            ) as get_function_url_config,
+            patch.object(p._client, "add_permission"),
+        ):
+            function_url = p._ensure_function_url()
+
+        get_function_url_config.assert_called_once_with(FunctionName=p.physical_name)
+        assert function_url == "https://existing.lambda-url.us-east-1.on.aws/"
