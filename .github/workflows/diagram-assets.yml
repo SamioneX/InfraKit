@@ -39,7 +39,14 @@ jobs:
           node-version: "20"
 
       - name: Render Mermaid diagram to SVG
-        run: npx -y @mermaid-js/mermaid-cli -i "${DIAGRAM_SRC}" -o "${DIAGRAM_OUT}"
+        run: |
+          cat > puppeteer-config.json <<'EOF'
+          { "args": ["--no-sandbox", "--disable-setuid-sandbox"] }
+          EOF
+          npx -y @mermaid-js/mermaid-cli \
+            -p puppeteer-config.json \
+            -i "${DIAGRAM_SRC}" \
+            -o "${DIAGRAM_OUT}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
