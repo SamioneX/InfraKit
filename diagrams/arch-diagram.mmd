@@ -1,0 +1,13 @@
+flowchart LR
+    User["Developer / CI"] --> CLI["InfraKit CLI"]
+    CLI --> Engine["InfraKit Engine"]
+    Engine --> Providers["Resource Providers"]
+    Providers --> AWS["AWS Services (Lambda, ALB, ECS, DynamoDB, Route53, etc.)"]
+    Providers --> CF["Cloudflare DNS"]
+    AWS --> State["State Backend (Local / S3 + DynamoDB Lock)"]
+
+    subgraph Sentinel["Optional SentinelAPI Integration"]
+        Providers --> SentinelProvider["sentinelapi provider"]
+        SentinelProvider --> SentinelSDK["sentinel-api SDK"]
+        SentinelSDK --> SentinelStack["SentinelAPI Stack"]
+    end

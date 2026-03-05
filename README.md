@@ -100,6 +100,32 @@ $ infrakit deploy --auto-approve
 
 ---
 
+## Architecture Diagram Automation
+
+InfraKit keeps Mermaid diagram code in-repo and auto-publishes an SVG asset on every push to `main`.
+
+- Diagram source: `diagrams/arch-diagram.mmd`
+- Generated output in CI: `diagrams/arch-diagram.svg`
+- Uploaded asset key: `infrakit/diagrams/arch-diagram.svg`
+- Workflow: `.github/workflows/diagram-assets.yml`
+
+### Required GitHub repository configuration
+
+- Repository variable `ASSET_BUCKET_TAG`
+  - Format: `key=value`
+  - Example: `sokech:resource-role=portfolio-assets`
+- Optional repository variable `ASSET_BUCKET_REGION`
+  - Default: `us-east-1`
+- Repository secret `AWS_ASSET_PUBLISH_ROLE_ARN`
+  - IAM role ARN assumed via GitHub OIDC
+  - Must allow:
+    - `tag:GetResources` (Resource Groups Tagging API)
+    - `s3:PutObject` on your assets bucket path
+
+Update `diagrams/arch-diagram.mmd`, push to `main`, and the workflow renders + uploads the latest SVG automatically.
+
+---
+
 ## Roadmap
 
 | Phase | Goal | Status |

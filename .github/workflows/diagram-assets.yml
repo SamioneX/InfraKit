@@ -1,0 +1,78 @@
+name: Generate Architecture Diagram
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  render-and-upload:
+    name: Render Mermaid SVG and upload to S3 assets bucket
+    runs-on: ubuntu-latest
+    env:
+      DIAGRAM_SRC: diagrams/arch-diagram.mmd
+      DIAGRAM_OUT: diagrams/arch-diagram.svg
+      DIAGRAM_S3_KEY: infrakit/diagrams/arch-diagram.svg
+      ASSET_BUCKET_TAG: ${{ vars.ASSET_BUCKET_TAG }}
+      AWS_REGION: ${{ vars.ASSET_BUCKET_REGION || 'us-east-1' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate bucket tag variable
+        run: |
+          if [ -z "${ASSET_BUCKET_TAG}" ]; then
+            echo "Repository variable ASSET_BUCKET_TAG is required (example: sokech:resource-role=portfolio-assets)."
+            exit 1
+          fi
+          if [[ "${ASSET_BUCKET_TAG}" != *"="* ]]; then
+            echo "ASSET_BUCKET_TAG must be in key=value format."
+            exit 1
+          fi
+
+      - name: Set up Node.js for Mermaid rendering
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Render Mermaid diagram to SVG
+        run: npx -y @mermaid-js/mermaid-cli -i "${DIAGRAM_SRC}" -o "${DIAGRAM_OUT}"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ASSET_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve target bucket by tag
+        id: bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_KEY="${ASSET_BUCKET_TAG%%=*}"
+          TAG_VALUE="${ASSET_BUCKET_TAG#*=}"
+
+          ARN="$(aws resourcegroupstaggingapi get-resources \
+            --resource-type-filters s3 \
+            --tag-filters "Key=${TAG_KEY},Values=${TAG_VALUE}" \
+            --query "ResourceTagMappingList[0].ResourceARN" \
+            --output text)"
+
+          if [ -z "${ARN}" ] || [ "${ARN}" = "None" ]; then
+            echo "No S3 bucket found for tag ${ASSET_BUCKET_TAG}"
+            exit 1
+          fi
+
+          BUCKET="${ARN#arn:aws:s3:::}"
+          echo "name=${BUCKET}" >> "$GITHUB_OUTPUT"
+          echo "Resolved bucket: ${BUCKET}"
+
+      - name: Upload architecture SVG
+        run: |
+          aws s3 cp "${DIAGRAM_OUT}" \
+            "s3://${{ steps.bucket.outputs.name }}/${DIAGRAM_S3_KEY}" \
+            --content-type "image/svg+xml" \
+            --cache-control "public,max-age=300"
